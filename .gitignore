@@ -1,0 +1,39 @@
+# Ympäristö ja salaisuudet
+.env
+.env.*
+!.env.example
+
+# Lokit, ajonaikainen data ja väliaikaistiedostot
+logs/
+tmp/
+temp/
+*.log
+*.tmp
+*.bak
+
+# Windows-järjestelmätiedostot
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Yleiset IDE- ja editorikansiot
+.vscode/
+.idea/
+.vs/
+*.user
+*.suo
+
+# Yleiset käännös- ja artefaktikansiot (täydennetään kielen valinnan jälkeen)
+build/
+dist/
+out/
+bin/
+obj/
+target/
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+node_modules/

@@ -1,0 +1,15 @@
+# Oletus rivinvaihdoille ja merkistölle
+* text=auto eol=lf
+
+# Windows-skriptit tarvitsevat CRLF:n
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binääritiedostot
+*.exe binary
+*.dll binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.webp binary
