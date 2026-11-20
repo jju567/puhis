@@ -44,7 +44,7 @@ src/
 │   ├── vad.py/cs              # Puheaktiivisuuden tunnistus (Voice Activity Detection)
 │   └── transcriber.py/cs      # Puhe -> teksti (rajapinta, jotta moottori on vaihdettavissa)
 ├── platform/                  # Windows-spesifiset rajapinnat (Win32 API)
-│   ├── puhisard_injector.py/cs# Näppäinpainallusten ja Unicode-tekstin lähetys (SendInput)
+│   ├── keyboard_injector.py/cs# Näppäinpainallusten ja Unicode-tekstin lähetys (SendInput)
 │   ├── window_manager.py/cs   # Aktiivisen ikkunan haku, fokusointi, piilotus
 │   ├── app_launcher.py/cs     # Sovellusten turvallinen käynnistys aliaksilla
 │   └── cursor_tracker.py/cs   # Hiiren globaalin sijainnin luku (GetCursorPos)
@@ -121,8 +121,8 @@ Jokaisella vaiheella on oma yksityiskohtainen toteutussuunnitelmansa ja tehtäv�
 
 | Vaihe | Sisältö | Suunnitelma & seuranta | Tila |
 | :--- | :--- | :--- | :--- |
-| **Vaihe 1** | Projektirunko, asetukset & kelluva kissa-avustin (silmät seuraavat hiirtä, `WS_EX_NOACTIVATE`, oikea klikki, Tray) | [vaihe1_runko_ja_kissa.md](vaiheet/vaihe1_runko_ja_kissa.md) | `Toteutettu – käyttäjän testaus kesken` |
-| **Vaihe 2** | Komentotulkki, tekstinmuunnos, Win32 `SendInput`, ikkunanhallinta (`save t1`, fokus, piilotus) & sovelluskäynnistys | [vaihe2_windows_ohjaus_ja_syotto.md](vaiheet/vaihe2_windows_ohjaus_ja_syotto.md) | `Suunniteltu` |
+| **Vaihe 1** | Projektirunko, asetukset & kelluva kissa-avustin (silmät seuraavat hiirtä, `WS_EX_NOACTIVATE`, oikea klikki, Tray) | [vaihe1_runko_ja_kissa.md](vaiheet/vaihe1_runko_ja_kissa.md) | `Valmis` |
+| **Vaihe 2** | Komentotulkki, tekstinmuunnos, Win32 `SendInput`, ikkunanhallinta (`save t1`, fokus, piilotus) & sovelluskäynnistys | [vaihe2_windows_ohjaus_ja_syotto.md](vaiheet/vaihe2_windows_ohjaus_ja_syotto.md) | `Valmis` |
 | **Vaihe 3** | Jatkuva taustakuuntelu (`sounddevice`), VAD & paikallinen `faster-whisper` (`small` INT8) + CPU-nopeustesti | [vaihe3_puheentunnistus_ja_kuuntelu.md](vaiheet/vaihe3_puheentunnistus_ja_kuuntelu.md) | `Suunniteltu` |
 | **Vaihe 4** | Asetusikkuna (herätesana, välimerkit/näppäimet, sovellukset, ikkunat `t1`/`t2`, reaaliaikainen tapahtumaloki) | [vaihe4_asetus_ui_ja_loki.md](vaiheet/vaihe4_asetus_ui_ja_loki.md) | `Suunniteltu` |
 | **Vaihe 5** | Viimeistely, moninäyttö-/mikrofonivakaus, valinnainen automaattikäynnistys & Windows `.exe`-paketointi | [vaihe5_viimeistely_ja_paketointi.md](vaiheet/vaihe5_viimeistely_ja_paketointi.md) | `Suunniteltu` |

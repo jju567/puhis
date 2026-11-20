@@ -19,7 +19,7 @@ src/puhis/
 
 - **Kerroserottelu:** `core/` ei saa koskaan importata `PySide6`- tai `platform/`-moduuleja. Näin koko ydinlogiikka on deterministisesti ja nopeasti yksikkötestattavissa ilman GUI:ta tai Windows-ikkunoita.
 - **Riippuvuuksien injektointi:** Välitä palvelut ja asetukset konstruktoreiden kautta (`__init__`) globaalien muuttujien tai singletonien sijaan.
-- **Rajapinnat (`Protocol`):** Eristä vaihdettavat komponentit (kuten puheentunnistin `Transcriber`, näppäinsyöttö `PuhisardInjector`, ikkunanhallinta `WindowManager`) `typing.Protocol`-rajapintojen taakse.
+- **Rajapinnat (`Protocol`):** Eristä vaihdettavat komponentit (kuten puheentunnistin `Transcriber`, näppäinsyöttö `KeyboardInjectorProtocol`, ikkunanhallinta `WindowManagerProtocol`) `typing.Protocol`-rajapintojen taakse.
 
 ---
 
