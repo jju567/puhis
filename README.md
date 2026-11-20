@@ -47,9 +47,9 @@ py -m venv .venv
 
 ### Nykyiset ominaisuudet (Vaihe 1)
 
-- **Kelluva kissa** (`src/puhis/ui/cat_widget.py`, `cat_painter.py`): aina päällimmäisenä, ei näy tehtäväpalkissa eikä vie fokusta aktiiviselta ikkunalta (`WS_EX_NOACTIVATE`). Silmät seuraavat hiirtä.
-- **Hiiri:** vasen klikki = sanelu päälle/pois (vihreä merkki ja hehku), raahaus = siirto (sijainti muistetaan), oikea klikki = valikko.
-- **Tilat:** lepo (harmaa merkki), sanelu (vihreä), mykistetty (punainen, silmät kiinni), virhe (oranssi).
+- **Kelluva kissa** (`src/puhis/ui/cat_widget.py`, `cat_painter.py`): aina päällimmäisenä, ei näy tehtäväpalkissa eikä vie fokusta aktiiviselta ikkunalta (`WS_EX_NOACTIVATE`). Silmät seuraavat hiirtä ja räpäyttävät luonnollisesti.
+- **Hiiri:** vasen klikki = sanelu päälle/pois, raahaus = siirto (sijainti muistetaan), oikea klikki = valikko (sis. väriteeman vaihto: *Hiili*, *Oranssi*, *Kerma*).
+- **Tilat:** lepo (harmaa kehä), sanelu (vihreä sykkivä kehä + hymy), komento (sinivioletti kehä), mykistetty (silmät kiinni + `zZ`), virhe (oranssinpunainen kehä, suupielet alaspäin ja `!`).
 - **Ilmaisinalue (Tray):** sama valikko; klikkaus näyttää/piilottaa kissan.
 - **Asetukset:** `%APPDATA%\puhis\config.json` (herätesana, kissan koko/sijainti, aloitustila, avainsanat, sovellusaliakset). Asetusikkuna tulee vaiheessa 4.
 - **Loki:** `%LOCALAPPDATA%\puhis\logs\puhis.log`.
