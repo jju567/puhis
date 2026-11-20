@@ -22,6 +22,13 @@ class CatTheme(StrEnum):
     CREAM = "cream"
 
 
+class SttEngine(StrEnum):
+    """Valittava puheentunnistusmoottori."""
+
+    WEB = "web"
+    WHISPER = "whisper"
+
+
 CONFIG_VERSION = 1
 MAX_CONFIG_BYTES = 1_000_000
 MIN_CAT_SIZE = 48
@@ -58,6 +65,7 @@ class AppConfig:
 
     wake_word: str = DEFAULT_WAKE_WORD
     start_mode: AssistantMode = AssistantMode.IDLE
+    stt_engine: SttEngine = SttEngine.WEB
     cat_theme: CatTheme = CatTheme.CHARCOAL
     cat_size: int = DEFAULT_CAT_SIZE
     cat_x: int | None = None
@@ -73,6 +81,7 @@ class AppConfig:
             "version": CONFIG_VERSION,
             "wake_word": self.wake_word,
             "start_mode": self.start_mode.value,
+            "stt_engine": self.stt_engine.value,
             "cat_theme": self.cat_theme.value,
             "cat_size": self.cat_size,
             "cat_x": self.cat_x,
@@ -88,6 +97,7 @@ class AppConfig:
         return cls(
             wake_word=_parse_wake_word(data.get("wake_word"), defaults.wake_word),
             start_mode=_parse_start_mode(data.get("start_mode"), defaults.start_mode),
+            stt_engine=_parse_stt_engine(data.get("stt_engine"), defaults.stt_engine),
             cat_theme=_parse_cat_theme(data.get("cat_theme"), defaults.cat_theme),
             cat_size=_parse_cat_size(data.get("cat_size"), defaults.cat_size),
             cat_x=_parse_optional_int(data.get("cat_x")),
@@ -116,6 +126,13 @@ def _parse_start_mode(value: Any, default: AssistantMode) -> AssistantMode:
 def _parse_cat_theme(value: Any, default: CatTheme) -> CatTheme:
     try:
         return CatTheme(value)
+    except ValueError:
+        return default
+
+
+def _parse_stt_engine(value: Any, default: SttEngine) -> SttEngine:
+    try:
+        return SttEngine(value)
     except ValueError:
         return default
 

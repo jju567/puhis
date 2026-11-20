@@ -8,7 +8,10 @@ Paikallisella puheentunnistuksella toimiva Windows-apuohjelma, jolla voit sanell
 
 - **Kieli:** Python 3.13+
 - **Käyttöliittymä:** `PySide6` (Qt6)
-- **Puheentunnistus (paikallinen):** `faster-whisper` (`small`, INT8 CPU-optimointi) + `sounddevice` + VAD
+- **Puheentunnistus (lennossa vaihdettava):**
+  - 🌐 **Selaintunnistus (`GoogleWebSpeechTranscriber`, `fi-FI`, oletus)** – sama nopea ja tarkka suomen puhekielen tunnistus kuin Chrome-selaimen Web Speech API:ssa (`SpeechRecognition`).
+  - 💻 **Paikallinen (`FasterWhisperTranscriber`, `small` INT8)** – 100 % offline CPU-tunnistus.
+  - **Äänikaappaus:** `sounddevice` + adaptiivinen VAD esipuskurilla.
 - **Windows-integraatio:** Win32 API (`ctypes`: `SendInput`, `GetForegroundWindow`, `SetForegroundWindow`, `ShowWindow`)
 
 ---

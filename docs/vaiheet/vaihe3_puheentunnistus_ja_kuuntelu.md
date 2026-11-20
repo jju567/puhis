@@ -1,6 +1,6 @@
 # Vaihe 3 – Jatkuva taustakuuntelu, VAD & paikallinen Whisper-STT
 
-**Tila:** `Toteutettu – odottaa käyttäjän mikrofoni- ja CPU-testiä`  
+**Tila:** `Valmis`  
 **Ylätason suunnitelma:** [../suunnitelma.md](../suunnitelma.md)
 
 ---
@@ -66,14 +66,14 @@ tests/
 | 3.1 | Asenna `sounddevice`, `numpy`, `faster-whisper` `.venv`:iin | `[x]` | `sounddevice 0.5.6`, `numpy 2.5.5`, `faster-whisper 1.2.1` |
 | 3.2 | Toteuta `scripts/benchmark_whisper.py` | `[x]` | Tukee `--dry-run`- ja oikeaa mallitestiä |
 | 3.3 | Toteuta `stt/vad.py` ja `stt/audio_capture.py` | `[x]` | Hallittu sammutus + esipuskuri |
-| 3.4 | Toteuta `stt/transcriber.py` (`TranscriberProtocol` + `FasterWhisperTranscriber`) | `[x]` | `small` INT8 + `initial_prompt` |
-| 3.5 | Kytke `AudioListener` ja `UtteranceRouter` Qt-signaaleilla `AppController`iin | `[x]` | Säieturvallinen `Signal(str)` |
-| 3.6 | Kirjoita yksikkötestit (`test_vad.py`, `test_transcriber.py`, `test_audio_capture.py`) | `[x]` | Yhteensä 72 yksikkötestiä |
-| 3.7 | Aja `compileall`, `unittest` ja live-mikrofonitesti | `[~]` | Automaattiset testit (72/72) OK; live-mikrofoni käyttäjän testattavana |
+| 3.4 | Toteuta `stt/transcriber.py` (`SwitchableTranscriber`: `GoogleWebSpeechTranscriber` + `FasterWhisperTranscriber`) | `[x]` | Lennossa vaihdettava (`web` / `whisper`) |
+| 3.5 | Kytke `AudioListener`, `SpeechBubble` ja `UtteranceRouter` Qt-signaaleilla `AppController`iin | `[x]` | Säieturvallinen `Signal(str)` + tulkkausanimaatio |
+| 3.6 | Kirjoita yksikkötestit (`test_vad.py`, `test_transcriber.py`, `test_audio_capture.py`) | `[x]` | Yhteensä 78 yksikkötestiä |
+| 3.7 | Aja `compileall`, `unittest` ja live-mikrofonitesti | `[x]` | 78/78 testiä OK, selaintunnistus testattu puheella |
 | 3.8 | Päivitä `README.md` ja seurantataulukot | `[x]` | |
 
 ### Hyväksymiskriteerit (Done)
-- [x] Lepotilan CPU-kuorma on matala (VAD ei laukaise Whisperiä hiljaisuudessa).
-- [ ] `"puhis avaa laskin"`, `"puhis save t1"`, `"puhis sanele"` ja välimerkkien sanelu toimivat luotettavasti mikrofonilla.
-- [x] Kissan tilaindikaattori päivittyy oikein (lepo / komento / sanelee / mykistetty / virhe).
-- [x] Kaikki yksikkötestit (72/72) ja syntaksitarkistukset menevät läpi.
+- [x] Lepotilan CPU-kuorma on matala (VAD ei laukaise tunnistinta hiljaisuudessa).
+- [x] `"puhis avaa laskin"`, `"puhis save t1"`, `"puhis sanele"` ja suomen puheen tunnistus toimivat luotettavasti mikrofonilla.
+- [x] Kissan tilaindikaattori, tulkkausanimaatio ja puhekupla päivittyvät oikein.
+- [x] Kaikki yksikkötestit (78/78) ja syntaksitarkistukset menevät läpi.

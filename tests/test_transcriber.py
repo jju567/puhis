@@ -6,8 +6,13 @@ import unittest
 
 import numpy as np
 
-from puhis.core.config_store import AppConfig
-from puhis.stt.transcriber import FasterWhisperTranscriber, build_initial_prompt
+from puhis.core.config_store import AppConfig, SttEngine
+from puhis.stt.transcriber import (
+    FasterWhisperTranscriber,
+    GoogleWebSpeechTranscriber,
+    SwitchableTranscriber,
+    build_initial_prompt,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +96,40 @@ class TranscriberTests(unittest.TestCase):
         transcriber = FasterWhisperTranscriber(model_factory=lambda *_args: _FakeModel([]))
         with self.assertRaises(ValueError):
             transcriber.transcribe(np.ones(100, dtype=np.float32), sample_rate=44_100)
+
+    def test_google_web_speech_transcriber_converts_float32_to_pcm16(self) -> None:
+        captured: list[tuple[int, int, str]] = []
+
+        def fake_recognize(pcm_bytes: bytes, sr: int, lang: str) -> str:
+            captured.append((len(pcm_bytes), sr, lang))
+            return "  puhis avaa laskin "
+
+        web = GoogleWebSpeechTranscriber(recognize_fn=fake_recognize)
+        audio = np.ones(800, dtype=np.float32) * 0.2
+        result = web.transcribe(audio, sample_rate=16_000)
+
+        self.assertEqual(result, "puhis avaa laskin")
+        self.assertEqual(captured, [(1600, 16_000, "fi-FI")])
+
+    def test_switchable_transcriber_switches_between_web_and_whisper(self) -> None:
+        web = GoogleWebSpeechTranscriber(recognize_fn=lambda _b, _sr, _l: "selain tulos")
+        whisper = FasterWhisperTranscriber(
+            model_factory=lambda *_args: _FakeModel([_FakeSegment(text="whisper tulos")])
+        )
+        switcher = SwitchableTranscriber(
+            initial_engine=SttEngine.WEB,
+            web_transcriber=web,
+            whisper_transcriber=whisper,
+        )
+        audio = np.ones(480, dtype=np.float32) * 0.1
+
+        self.assertEqual(switcher.transcribe(audio), "selain tulos")
+        self.assertFalse(whisper.is_loaded)
+
+        switcher.set_engine(SttEngine.WHISPER)
+        self.assertIs(switcher.engine, SttEngine.WHISPER)
+        self.assertEqual(switcher.transcribe(audio), "whisper tulos")
+        self.assertTrue(whisper.is_loaded)
 
 
 if __name__ == "__main__":

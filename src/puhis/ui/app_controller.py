@@ -8,15 +8,15 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from puhis.core.actions import UtteranceResult
 from puhis.core.app_state import AssistantMode, toggle_dictation, toggle_mute
-from puhis.core.config_store import AppConfig, CatTheme, ConfigStore
+from puhis.core.config_store import AppConfig, CatTheme, ConfigStore, SttEngine
 from puhis.core.utterance_router import UtteranceRouter
 from puhis.core.window_registry import WindowRegistry
 from puhis.platform.app_launcher import AppLauncher
 from puhis.platform.keyboard_injector import KeyboardInjector
 from puhis.platform.window_manager import WindowManager
 from puhis.stt.audio_capture import AudioListener
-from puhis.stt.transcriber import FasterWhisperTranscriber, build_initial_prompt
-from puhis.ui.app_menu import AppMenu
+from puhis.stt.transcriber import SwitchableTranscriber, build_initial_prompt
+from puhis.ui.app_menu import AppMenu, ENGINE_LABELS_FI
 from puhis.ui.cat_widget import CatWidget
 from puhis.ui.speech_bubble import BubbleTone, SpeechBubble
 from puhis.ui.tray_icon import PuhisTrayIcon
@@ -59,15 +59,17 @@ class AppController(QObject):
             app_launcher=AppLauncher(self._config.app_aliases),
         )
 
+        self._transcriber: SwitchableTranscriber | None = None
         self._listener: AudioListener | None = None
         if listener is not None:
             self._listener = listener
         elif enable_audio:
-            transcriber = FasterWhisperTranscriber(
+            self._transcriber = SwitchableTranscriber(
+                initial_engine=self._config.stt_engine,
                 initial_prompt=build_initial_prompt(self._config),
             )
             self._listener = AudioListener(
-                transcriber=transcriber,
+                transcriber=self._transcriber,
                 on_utterance=self.utterance_received.emit,
                 on_error=self.listener_error.emit,
                 on_processing=self.processing_changed.emit,
@@ -102,7 +104,8 @@ class AppController(QObject):
         """Käsittelee tunnistetun puhejakson pääsäikeessä."""
         self._cat.set_processing(False)
         result = self._router.handle_utterance(text, self._mode)
-        heard_line = f'🗣 "{text.strip()}"'
+        engine_tag = "🌐" if self._config.stt_engine is SttEngine.WEB else "💻"
+        heard_line = f'{engine_tag} "{text.strip()}"'
 
         if not result.handled:
             if text.strip() and self._mode is AssistantMode.IDLE:
@@ -189,6 +192,7 @@ class AppController(QObject):
 
         self._menu.dictation_action.triggered.connect(self._on_toggle_dictation)
         self._menu.mute_action.triggered.connect(self._on_toggle_mute)
+        self._menu.engine_selected.connect(self._on_engine_selected)
         self._menu.theme_selected.connect(self._on_theme_selected)
         self._menu.visibility_action.triggered.connect(self._on_toggle_visibility)
         self._menu.quit_action.triggered.connect(self.quit)
@@ -270,6 +274,17 @@ class AppController(QObject):
         self._tray.set_theme(theme)
         self._refresh_menu()
         self._save_config()
+
+    def _on_engine_selected(self, engine: SttEngine) -> None:
+        if engine is self._config.stt_engine:
+            return
+        self._config.stt_engine = engine
+        if self._transcriber is not None:
+            self._transcriber.set_engine(engine)
+        self._refresh_menu()
+        self._save_config()
+        label = ENGINE_LABELS_FI.get(engine, engine.value)
+        self._show_bubble("Puheentunnistin vaihdettu", label, BubbleTone.COMMAND, duration_ms=3200)
 
     def _on_toggle_visibility(self) -> None:
         visible = not self._cat.isVisible()
@@ -356,7 +371,12 @@ class AppController(QObject):
         self._refresh_menu()
 
     def _refresh_menu(self) -> None:
-        self._menu.update_state(self._mode, self._cat.isVisible(), self._config.cat_theme)
+        self._menu.update_state(
+            self._mode,
+            self._cat.isVisible(),
+            self._config.cat_theme,
+            self._config.stt_engine,
+        )
 
     def _on_about_to_quit(self) -> None:
         if self._listener is not None:

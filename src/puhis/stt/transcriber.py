@@ -1,13 +1,14 @@
-"""Puheentunnistimen rajapinta (`TranscriberProtocol`) ja `faster-whisper`-toteutus."""
+"""Puheentunnistimen rajapinta sekä Google Web Speech (`fi-FI`) ja `faster-whisper` -toteutukset."""
 
 from collections.abc import Callable, Iterable
 import logging
 from pathlib import Path
+import threading
 from typing import Any, Protocol
 
 import numpy as np
 
-from puhis.core.config_store import AppConfig
+from puhis.core.config_store import AppConfig, SttEngine
 from puhis.platform.paths import ensure_dir, get_models_dir
 from puhis.stt.vad import DEFAULT_SAMPLE_RATE
 
@@ -16,19 +17,20 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL_SIZE = "small"
 DEFAULT_COMPUTE_TYPE = "int8"
 DEFAULT_LANGUAGE = "fi"
+DEFAULT_WEB_LANGUAGE = "fi-FI"
 DEFAULT_CPU_THREADS = 4
 MAX_NO_SPEECH_PROB = 0.75
 
 
 class TranscriberProtocol(Protocol):
-    """Vaihdettava puheentunnistimen rajapinta (paikallinen tai pilvi)."""
+    """Vaihdettava puheentunnistimen rajapinta (selain/pilvi tai paikallinen)."""
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = DEFAULT_SAMPLE_RATE) -> str:
         """Muuntaa mono float32 -äänipuskurin tekstiksi."""
 
 
 def build_initial_prompt(config: AppConfig) -> str:
-    """Rakentaa Whisperille avainsanavihjeen suomen- ja englanninkielisille komennoille."""
+    """Rakentaa Whisperille tiiviin sanastovihjeen."""
     terms: list[str] = [
         config.wake_word,
         "sanele",
@@ -37,7 +39,6 @@ def build_initial_prompt(config: AppConfig) -> str:
         "save t1",
         "t1",
         "t2",
-        "t3",
         "fokus t1",
         "piilota t1",
         "avaa",
@@ -50,6 +51,58 @@ def build_initial_prompt(config: AppConfig) -> str:
         if keyword not in terms:
             terms.append(keyword)
     return ", ".join(terms)
+
+
+def normalize_audio(samples: np.ndarray, target_peak: float = 0.7, max_gain: float = 20.0) -> np.ndarray:
+    """Vahvistaa hiljaisen mikrofonisignaalin sopivalle tasolle tunnistinta varten."""
+    if samples.size == 0:
+        return samples
+    peak = float(np.max(np.abs(samples)))
+    if peak <= 1e-4 or peak >= target_peak:
+        return samples
+    gain = min(max_gain, target_peak / peak)
+    return np.clip(samples * gain, -1.0, 1.0).astype(np.float32, copy=False)
+
+
+def _default_web_recognize(pcm16_bytes: bytes, sample_rate: int, language: str) -> str:
+    import speech_recognition as sr
+
+    recognizer = sr.Recognizer()
+    audio_data = sr.AudioData(pcm16_bytes, sample_rate, 2)
+    try:
+        result = recognizer.recognize_google(audio_data, language=language)
+        return str(result).strip()
+    except sr.UnknownValueError:
+        return ""
+    except sr.RequestError as exc:
+        raise OSError(f"Selaintunnistuspalvelu ei vastaa: {exc}") from exc
+
+
+class GoogleWebSpeechTranscriber:
+    """Chromen Web Speech APIa vastaava nopea ja tarkka Google `fi-FI` -puheentunnistin."""
+
+    def __init__(
+        self,
+        language: str = DEFAULT_WEB_LANGUAGE,
+        recognize_fn: Callable[[bytes, int, str], str] = _default_web_recognize,
+    ) -> None:
+        self._language = language
+        self._recognize_fn = recognize_fn
+
+    def load_model(self) -> None:
+        """Selaintunnistin ei vaadi paikallisen mallin latausta."""
+
+    def transcribe(self, audio: np.ndarray, sample_rate: int = DEFAULT_SAMPLE_RATE) -> str:
+        """Lähettää vahvistetun 16-bit PCM-äänen Google Web Speech (`fi-FI`) -tunnistukseen."""
+        samples = np.asarray(audio, dtype=np.float32).reshape(-1)
+        if samples.size == 0:
+            return ""
+        if sample_rate <= 0:
+            raise ValueError(f"Virheellinen näytteenottotaajuus: {sample_rate}")
+
+        normalized = normalize_audio(samples)
+        pcm16 = (np.clip(normalized, -1.0, 1.0) * 32767.0).astype(np.int16)
+        return self._recognize_fn(pcm16.tobytes(), sample_rate, self._language).strip()
 
 
 def _default_model_factory(
@@ -140,8 +193,8 @@ class FasterWhisperTranscriber:
         segments, _info = self._model.transcribe(
             normalized,
             language=self._language,
-            beam_size=1,
-            best_of=1,
+            beam_size=2,
+            best_of=2,
             temperature=0.0,
             condition_on_previous_text=False,
             without_timestamps=True,
@@ -152,15 +205,44 @@ class FasterWhisperTranscriber:
         return _collect_segments_text(segments)
 
 
-def normalize_audio(samples: np.ndarray, target_peak: float = 0.7, max_gain: float = 20.0) -> np.ndarray:
-    """Vahvistaa hiljaisen mikrofonisignaalin sopivalle tasolle Whisperiä varten."""
-    if samples.size == 0:
-        return samples
-    peak = float(np.max(np.abs(samples)))
-    if peak <= 1e-4 or peak >= target_peak:
-        return samples
-    gain = min(max_gain, target_peak / peak)
-    return np.clip(samples * gain, -1.0, 1.0).astype(np.float32, copy=False)
+class SwitchableTranscriber:
+    """Lennossa vaihdettava puheentunnistin (Selaintunnistus `web` <-> Paikallinen `whisper`)."""
+
+    def __init__(
+        self,
+        initial_engine: SttEngine = SttEngine.WEB,
+        web_transcriber: TranscriberProtocol | None = None,
+        whisper_transcriber: FasterWhisperTranscriber | None = None,
+        initial_prompt: str = "",
+    ) -> None:
+        self._lock = threading.Lock()
+        self._engine = initial_engine
+        self._web = web_transcriber or GoogleWebSpeechTranscriber()
+        self._whisper = whisper_transcriber or FasterWhisperTranscriber(initial_prompt=initial_prompt)
+
+    @property
+    def engine(self) -> SttEngine:
+        with self._lock:
+            return self._engine
+
+    def set_engine(self, engine: SttEngine) -> None:
+        """Vaihtaa aktiivisen tunnistusmoottorin lennossa."""
+        with self._lock:
+            if engine is self._engine:
+                return
+            self._engine = engine
+            logger.info("Puheentunnistusmoottori vaihdettu: %s", engine.value)
+
+    def load_model(self) -> None:
+        """Esilataa paikallisen Whisper-mallin vain, jos Whisper on valittuna."""
+        if self.engine is SttEngine.WHISPER:
+            self._whisper.load_model()
+
+    def transcribe(self, audio: np.ndarray, sample_rate: int = DEFAULT_SAMPLE_RATE) -> str:
+        active_engine = self.engine
+        if active_engine is SttEngine.WEB:
+            return self._web.transcribe(audio, sample_rate=sample_rate)
+        return self._whisper.transcribe(audio, sample_rate=sample_rate)
 
 
 def _collect_segments_text(segments: Iterable[Any]) -> str:

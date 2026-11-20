@@ -1,7 +1,8 @@
 # Käyttöliittymä (Qt6)
 PySide6>=6.7.0
 
-# Ääni ja paikallinen puheentunnistus (Vaihe 3+)
+# Ääni ja puheentunnistus (Vaihe 3+: paikallinen Whisper + selaintason Web Speech)
 sounddevice>=0.5.0
 numpy>=1.26.0
 faster-whisper>=1.1.0
+SpeechRecognition>=3.10.0
