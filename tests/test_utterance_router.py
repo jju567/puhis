@@ -129,13 +129,19 @@ class UtteranceRouterTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("Tuntematon ikkuna", result.message)
 
-    def test_launch_app_executes_even_while_dictating(self) -> None:
+    def test_launch_app_switches_to_dictating_and_executes_even_while_dictating(self) -> None:
+        from_idle = self.router.handle_utterance("puhis avaa muistio", AssistantMode.IDLE)
         ok_res = self.router.handle_utterance("puhis avaa laskin", AssistantMode.DICTATING)
-        fail_res = self.router.handle_utterance("puhis avaa tuntematon", AssistantMode.DICTATING)
+        fail_res = self.router.handle_utterance("puhis avaa tuntematon", AssistantMode.IDLE)
 
+        self.assertTrue(from_idle.success)
+        self.assertIs(from_idle.new_mode, AssistantMode.DICTATING)
+        self.assertIn("sanelu päällä", from_idle.message)
         self.assertTrue(ok_res.success)
-        self.assertEqual(self.launcher.launched, ["laskin"])
+        self.assertIs(ok_res.new_mode, AssistantMode.DICTATING)
+        self.assertEqual(self.launcher.launched, ["muistio", "laskin"])
         self.assertFalse(fail_res.success)
+        self.assertIsNone(fail_res.new_mode)
         self.assertEqual(self.keyboard.sent_batches, [])
 
     def test_two_step_wake_word_then_command_without_wake_word(self) -> None:

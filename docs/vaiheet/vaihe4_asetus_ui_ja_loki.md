@@ -1,6 +1,6 @@
 # Vaihe 4 – Asetusikkuna, muokattavat avainsanat & tapahtumaloki
 
-**Tila:** `Suunniteltu (odottaa Vaiheen 3 valmistumista ja hyväksyntää)`  
+**Tila:** `Toteutettu – odottaa käyttäjän testausta`  
 **Ylätason suunnitelma:** [../suunnitelma.md](../suunnitelma.md)
 
 ---
@@ -63,15 +63,15 @@ tests/
 
 | # | Tehtävä | Tila | Huomiot |
 | :--- | :--- | :--- | :--- |
-| 4.1 | Toteuta `core/config_validator.py` ja `core/event_log.py` | `[ ]` | |
-| 4.2 | Toteuta `ui/settings_window.py` ja välilehdet (`ui/tabs/`) | `[ ]` | Pidä tiedostot < 400 riviä |
-| 4.3 | Kytke asetusten välitön päivitys (`hot-reload`) kontrolleriin ja kissaan | `[ ]` | |
-| 4.4 | Kytke reaaliaikainen tapahtumaloki UI:hin Qt-signaaleilla | `[ ]` | |
-| 4.5 | Kirjoita yksikkötestit (`test_config_validator.py`, `test_event_log.py`) | `[ ]` | |
-| 4.6 | Aja `compileall`, `unittest` ja manuaalinen UI-testaus | `[ ]` | |
-| 4.7 | Päivitä `README.md` ja seurantataulukot | `[ ]` | |
+| 4.1 | Toteuta `core/config_validator.py` ja `core/event_log.py` | `[x]` | |
+| 4.2 | Toteuta `ui/settings_window.py` ja välilehdet (`ui/tabs/`) | `[x]` | Kaikki tiedostot < 220 riviä |
+| 4.3 | Kytke asetusten välitön päivitys (`hot-reload`) kontrolleriin ja kissaan | `[x]` | |
+| 4.4 | Kytke reaaliaikainen tapahtumaloki UI:hin Qt-signaaleilla | `[x]` | |
+| 4.5 | Kirjoita yksikkötestit (`test_config_validator.py`, `test_event_log.py`) | `[x]` | Yhteensä 85 yksikkötestiä |
+| 4.6 | Aja `compileall`, `unittest` ja manuaalinen UI-testaus | `[~]` | Automaattiset testit (85/85) OK |
+| 4.7 | Päivitä `README.md` ja seurantataulukot | `[x]` | |
 
 ### Hyväksymiskriteerit (Done)
-- [ ] Herätesana, välimerkkiavainsanat ja sovellusaliakset ovat muokattavissa UI:sta ja astuvat voimaan heti.
-- [ ] Tapahtumaloki näyttää selkeästi kuullun tekstin ja suoritetun toiminnon.
-- [ ] Kaikki yksikkötestit ja syntaksitarkistukset menevät läpi.
+- [x] Herätesana, välimerkkiavainsanat ja sovellusaliakset ovat muokattavissa UI:sta ja astuvat voimaan heti.
+- [x] Tapahtumaloki näyttää selkeästi kuullun tekstin ja suoritetun toiminnon.
+- [x] Kaikki yksikkötestit (85/85) ja syntaksitarkistukset menevät läpi.

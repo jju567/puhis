@@ -83,6 +83,15 @@ class CatWidget(QWidget):
         self._theme = theme
         self.update()
 
+    def set_cat_size(self, size: int) -> None:
+        """Muuttaa kissan koon lennossa."""
+        if size == self.width():
+            return
+        self._geometry = CatGeometry(float(size))
+        self.setFixedSize(size, size)
+        self.update()
+        self.geometry_changed.emit(self.geometry())
+
     def set_badge_text(self, text: str) -> None:
         """Asettaa kissan päällä näytettävän lyhyen tilatekstin (esim. 'KUUNTELEN!')."""
         if text == self._badge_text:

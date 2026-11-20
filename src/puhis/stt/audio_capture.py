@@ -172,7 +172,7 @@ class AudioListener:
     def _transcribe_and_emit(self, segment: np.ndarray, sample_rate: int) -> None:
         duration_s = segment.size / max(1, sample_rate)
         rms = compute_rms(segment)
-        logger.info("Puhejakso havaittu (%.1f s, rms=%.4f), tunnistetaan...", duration_s, rms)
+        logger.debug("Puhejakso havaittu (%.1f s, rms=%.4f), tunnistetaan...", duration_s, rms)
         if self._on_processing is not None:
             self._on_processing(True)
         try:
@@ -186,12 +186,10 @@ class AudioListener:
             return
 
         if text:
-            logger.info("Tunnistettu puhe: %r", text)
+            logger.info("Tunnistettu puhe (%.1f s): %r", duration_s, text)
             self._on_utterance(text)
-        else:
-            logger.info("Puhejaksosta ei tunnistettu sanoja")
-            if self._on_processing is not None:
-                self._on_processing(False)
+        elif self._on_processing is not None:
+            self._on_processing(False)
 
     def _drain_queue(self) -> None:
         while True:

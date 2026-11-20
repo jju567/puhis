@@ -108,8 +108,9 @@ src/puhis/
   - Rajatapaukset: tyhjä puhe, ääkköset, isot/pienet kirjaimet, peräkkäiset välimerkit/näppäinkomennot, puuttuvat avaimet, korruptoitunut JSON.
   - Virhetilanteet: tuntematon ikkuna-alias (`t99`), suljettu ikkuna, puuttuva sovellusalias.
 
-### Pakollinen tarkistuslista ennen committia
+### Pakollinen tarkistuslista ennen committia / buildia
 
+0. **Versionumeron kasvatus:** Kasvata versionumeroa joka buildilla (`src/puhis/__init__.py` ja `pyproject.toml`, apuskripti: `.\.venv\Scripts\python.exe scripts\bump_version.py`).
 1. **Virtuaaliympäristö:** Pidä kaikki paketit `.venv`-hakemistossa ja päivitä `requirements.txt` & `pyproject.toml` uusien riippuvuuksien myötä.
 2. **Syntaksitarkistus:**
    ```powershell

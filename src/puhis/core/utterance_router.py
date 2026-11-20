@@ -126,7 +126,14 @@ class UtteranceRouter:
                     message="Sovelluksen nimi puuttuu.",
                 )
             ok, msg = self._launcher.launch(target)
-            return UtteranceResult(handled=True, success=ok, message=msg)
+            if ok:
+                return UtteranceResult(
+                    handled=True,
+                    success=True,
+                    message=f"{msg} – sanelu päällä",
+                    new_mode=AssistantMode.DICTATING,
+                )
+            return UtteranceResult(handled=True, success=False, message=msg)
 
         label = target or command.raw_text.strip()
         logger.warning("Tuntematon herätesanakomento: %s", label)

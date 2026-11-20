@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 from puhis.core.actions import UtteranceResult
 from puhis.core.app_state import AssistantMode, toggle_dictation, toggle_mute
 from puhis.core.config_store import AppConfig, CatTheme, ConfigStore, SttEngine
+from puhis.core.event_log import EventLog
 from puhis.core.utterance_router import UtteranceRouter
 from puhis.core.window_registry import WindowRegistry
 from puhis.platform.app_launcher import AppLauncher
@@ -18,6 +19,7 @@ from puhis.stt.audio_capture import AudioListener
 from puhis.stt.transcriber import SwitchableTranscriber, build_initial_prompt
 from puhis.ui.app_menu import AppMenu, ENGINE_LABELS_FI
 from puhis.ui.cat_widget import CatWidget
+from puhis.ui.settings_window import SettingsWindow
 from puhis.ui.speech_bubble import BubbleTone, SpeechBubble
 from puhis.ui.tray_icon import PuhisTrayIcon
 
@@ -51,12 +53,14 @@ class AppController(QObject):
         self._mode = self._config.start_mode
 
         self._window_registry = WindowRegistry()
+        self._event_log = EventLog()
+        self._app_launcher = AppLauncher(self._config.app_aliases)
         self._router = router or UtteranceRouter(
             config=self._config,
             window_registry=self._window_registry,
             keyboard_injector=KeyboardInjector(),
             window_manager=WindowManager(),
-            app_launcher=AppLauncher(self._config.app_aliases),
+            app_launcher=self._app_launcher,
         )
 
         self._transcriber: SwitchableTranscriber | None = None
@@ -79,6 +83,7 @@ class AppController(QObject):
         self._bubble = SpeechBubble()
         self._menu = AppMenu()
         self._tray = PuhisTrayIcon(self._menu, self, theme=self._config.cat_theme)
+        self._settings_window: SettingsWindow | None = None
 
         self._flash_restore_mode: AssistantMode | None = None
         self._flash_timer = QTimer(self)
@@ -108,14 +113,9 @@ class AppController(QObject):
         heard_line = f'{engine_tag} "{text.strip()}"'
 
         if not result.handled:
-            if text.strip() and self._mode is AssistantMode.IDLE:
-                self._show_bubble(
-                    heard_line,
-                    f'💤 Lepotila (aloita sanalla "{self._config.wake_word}")',
-                    BubbleTone.PROCESSING,
-                    duration_ms=2600,
-                )
             return result
+
+        self._record_event(text, result.message or "OK", success=result.success)
 
         if result.message:
             self._cat.setToolTip(f"Puhis – {result.message}")
@@ -194,6 +194,7 @@ class AppController(QObject):
         self._menu.mute_action.triggered.connect(self._on_toggle_mute)
         self._menu.engine_selected.connect(self._on_engine_selected)
         self._menu.theme_selected.connect(self._on_theme_selected)
+        self._menu.settings_action.triggered.connect(self._on_open_settings)
         self._menu.visibility_action.triggered.connect(self._on_toggle_visibility)
         self._menu.quit_action.triggered.connect(self.quit)
 
@@ -213,26 +214,11 @@ class AppController(QObject):
         self._cat.set_processing(is_processing)
         if is_processing:
             # Jos kissa on COMMAND-kuuntelutilassa, estetään tilan vanheneminen
-            # kesken Whisperin laskennan.
+            # kesken puheentunnistuksen.
             if self._mode is AssistantMode.COMMAND and self._flash_timer.isActive():
                 self._flash_timer.stop()
-            self._show_bubble(
-                "🎤 Puhejakso havaittu",
-                "⏳ Tulkataan puhetta…",
-                BubbleTone.PROCESSING,
-                duration_ms=15_000,
-            )
-        else:
-            if self._mode is AssistantMode.COMMAND and not self._flash_timer.isActive():
-                self._flash_timer.start(WAKE_WINDOW_MS // 2)
-                self._show_bubble(
-                    "🟢 Kuuntelen edelleen",
-                    "Sano komento…",
-                    BubbleTone.COMMAND,
-                    duration_ms=WAKE_WINDOW_MS // 2,
-                )
-            else:
-                self._bubble.hide()
+        elif self._mode is AssistantMode.COMMAND and not self._flash_timer.isActive():
+            self._flash_timer.start(WAKE_WINDOW_MS // 2)
 
     def _on_listener_error(self, message: str) -> None:
         logger.error("Taustakuuntelun virhe: %s", message)
@@ -306,18 +292,63 @@ class AppController(QObject):
         self._config.cat_y = pos.y()
         self._save_config()
 
+    def _on_open_settings(self) -> None:
+        if self._settings_window is None:
+            self._settings_window = SettingsWindow(
+                config=self._config,
+                window_registry=self._window_registry,
+                event_log=self._event_log,
+            )
+            self._settings_window.config_saved.connect(self._on_config_saved)
+            self._settings_window.focus_window_requested.connect(self._on_focus_window_from_ui)
+        else:
+            self._settings_window.load_config(self._config)
+        self._settings_window.show()
+        self._settings_window.raise_()
+        self._settings_window.activateWindow()
+
+    def _on_config_saved(self, new_config: AppConfig) -> None:
+        new_config.cat_x = self._config.cat_x
+        new_config.cat_y = self._config.cat_y
+        self._config = new_config
+        self._router.update_config(self._config)
+        self._app_launcher.update_aliases(self._config.app_aliases)
+        if self._transcriber is not None:
+            self._transcriber.set_engine(self._config.stt_engine)
+        self._cat.set_theme(self._config.cat_theme)
+        self._cat.set_cat_size(self._config.cat_size)
+        self._tray.set_theme(self._config.cat_theme)
+        self._refresh_menu()
+        self._save_config()
+        self._show_bubble(
+            "⚙️ Asetukset tallennettu",
+            "Muutokset ovat heti voimassa",
+            BubbleTone.COMMAND,
+            duration_ms=2800,
+        )
+
+    def _on_focus_window_from_ui(self, alias: str) -> None:
+        self.handle_utterance(f"{self._config.wake_word} fokus {alias}")
+
     def quit(self) -> None:
         """Sulkee taustakuuntelun ja sovelluksen hallitusti."""
         logger.info("puhis suljetaan")
         self._flash_timer.stop()
         if self._listener is not None:
             self._listener.stop()
+        if self._settings_window is not None:
+            self._settings_window.close()
         self._tray.hide()
         self._bubble.close()
         self._cat.close()
         self._app.quit()
 
     # --- Sisäiset ------------------------------------------------------
+
+    def _record_event(self, heard_text: str, action_message: str, *, success: bool) -> None:
+        event = self._event_log.append(heard_text, action_message, success=success)
+        if self._settings_window is not None:
+            self._settings_window.notify_event_logged(event)
 
     def _show_bubble(
         self,

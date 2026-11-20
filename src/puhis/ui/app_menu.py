@@ -69,9 +69,7 @@ class AppMenu(QMenu):
             self.theme_menu.addAction(action)
             self._theme_actions[theme] = action
 
-        # Asetusikkuna toteutetaan vaiheessa 4.
-        self.settings_action = QAction("Asetukset… (tulossa)", self)
-        self.settings_action.setEnabled(False)
+        self.settings_action = QAction("Asetukset ja hallinta…", self)
 
         self.visibility_action = QAction(self)
         self.quit_action = QAction("Sulje Puhis", self)

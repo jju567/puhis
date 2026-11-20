@@ -155,8 +155,17 @@ def paint_cat(
         processing=processing,
         spinner_angle_deg=spinner_angle_deg,
     )
+
+    perk = (0.55 + 0.45 * max(0.0, min(1.0, halo_pulse))) if processing else (
+        0.45 if mode is AssistantMode.COMMAND else 0.0
+    )
+    painter.save()
+    if perk > 0.0:
+        # Kissa kohottaa päätään valppaasti havahtuessaan ääneen.
+        painter.translate(0.0, -0.022 * geometry.size * perk)
+
     _paint_drop_shadow(painter, geometry)
-    _paint_ears(painter, geometry, palette)
+    _paint_ears(painter, geometry, palette, ear_perk=perk)
     _paint_head(painter, geometry, palette)
 
     if mode is AssistantMode.MUTED or blinking:
@@ -178,23 +187,24 @@ def paint_cat(
         geometry,
         palette,
         perked=mode in (AssistantMode.COMMAND, AssistantMode.DICTATING) or processing,
+        twitch=perk if processing else 0.0,
     )
+    if processing:
+        _paint_ear_attention_waves(painter, geometry, halo_pulse)
+    painter.restore()
 
     if mode is AssistantMode.MUTED:
         _paint_zzz(painter, geometry)
     elif mode is AssistantMode.ERROR:
         _paint_error_badge(painter, geometry, ring_color)
 
-    active_badge = badge_text or (
-        "TULKATAAN…" if processing else ("KUUNTELEN!" if mode is AssistantMode.COMMAND else "")
-    )
+    active_badge = badge_text or ("KUUNTELEN!" if mode is AssistantMode.COMMAND else "")
     if active_badge:
         _paint_status_pill(
             painter,
             geometry,
             active_badge,
             is_error=mode is AssistantMode.ERROR,
-            is_processing=processing and not badge_text,
         )
 
     painter.restore()
@@ -289,37 +299,67 @@ def _paint_drop_shadow(painter: QPainter, geometry: CatGeometry) -> None:
     painter.restore()
 
 
-def _ear_path(geometry: CatGeometry, *, left: bool) -> QPainterPath:
+def _ear_path(geometry: CatGeometry, *, left: bool, ear_perk: float = 0.0) -> QPainterPath:
     sign = 1.0 if left else -1.0
     cx = lambda x: 0.50 + sign * (x - 0.50)  # noqa: E731
+    tip_lift = 0.048 * ear_perk
+    tip_out = 0.015 * ear_perk
     path = QPainterPath(geometry.p(cx(0.20), 0.44))
-    path.quadTo(geometry.p(cx(0.18), 0.24), geometry.p(cx(0.23), 0.16))
-    path.quadTo(geometry.p(cx(0.25), 0.13), geometry.p(cx(0.28), 0.15))
-    path.quadTo(geometry.p(cx(0.37), 0.22), geometry.p(cx(0.42), 0.29))
+    path.quadTo(geometry.p(cx(0.18 - tip_out), 0.24 - tip_lift), geometry.p(cx(0.23 - tip_out), 0.16 - tip_lift))
+    path.quadTo(geometry.p(cx(0.25 - tip_out), 0.13 - tip_lift), geometry.p(cx(0.28), 0.15 - tip_lift))
+    path.quadTo(geometry.p(cx(0.37), 0.22 - tip_lift * 0.4), geometry.p(cx(0.42), 0.29))
     path.closeSubpath()
     return path
 
 
-def _inner_ear_path(geometry: CatGeometry, *, left: bool) -> QPainterPath:
+def _inner_ear_path(geometry: CatGeometry, *, left: bool, ear_perk: float = 0.0) -> QPainterPath:
     sign = 1.0 if left else -1.0
     cx = lambda x: 0.50 + sign * (x - 0.50)  # noqa: E731
+    tip_lift = 0.042 * ear_perk
+    tip_out = 0.012 * ear_perk
     path = QPainterPath(geometry.p(cx(0.235), 0.39))
-    path.quadTo(geometry.p(cx(0.225), 0.26), geometry.p(cx(0.255), 0.205))
-    path.quadTo(geometry.p(cx(0.325), 0.25), geometry.p(cx(0.365), 0.305))
+    path.quadTo(geometry.p(cx(0.225 - tip_out), 0.26 - tip_lift), geometry.p(cx(0.255 - tip_out), 0.205 - tip_lift))
+    path.quadTo(geometry.p(cx(0.325), 0.25 - tip_lift * 0.5), geometry.p(cx(0.365), 0.305))
     path.closeSubpath()
     return path
 
 
-def _paint_ears(painter: QPainter, geometry: CatGeometry, palette: CatPalette) -> None:
+def _paint_ears(
+    painter: QPainter,
+    geometry: CatGeometry,
+    palette: CatPalette,
+    *,
+    ear_perk: float = 0.0,
+) -> None:
     s = geometry.size
     for left in (True, False):
         painter.setPen(_pen(palette.outline, 0.018 * s))
         painter.setBrush(palette.fur_dark)
-        painter.drawPath(_ear_path(geometry, left=left))
+        painter.drawPath(_ear_path(geometry, left=left, ear_perk=ear_perk))
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(palette.inner_ear)
-        painter.drawPath(_inner_ear_path(geometry, left=left))
+        painter.drawPath(_inner_ear_path(geometry, left=left, ear_perk=ear_perk))
+
+
+def _paint_ear_attention_waves(
+    painter: QPainter,
+    geometry: CatGeometry,
+    halo_pulse: float,
+) -> None:
+    """Piirtää korvien viereen pienet animoidut ääniaaltokaaret kissan havahtuessa."""
+    s = geometry.size
+    alpha = int(130 + 110 * max(0.0, min(1.0, halo_pulse)))
+    wave_color = QColor(PROCESSING_COLOR)
+    wave_color.setAlpha(alpha)
+    painter.setPen(_pen(wave_color, 0.020 * s))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+
+    spread = 0.015 * halo_pulse
+    left_arc = QRectF((0.08 - spread) * s, (0.10 - spread) * s, 0.16 * s, 0.16 * s)
+    right_arc = QRectF((0.76 + spread) * s, (0.10 - spread) * s, 0.16 * s, 0.16 * s)
+    painter.drawArc(left_arc, 115 * 16, 75 * 16)
+    painter.drawArc(right_arc, -10 * 16, 75 * 16)
 
 
 def _paint_head(painter: QPainter, geometry: CatGeometry, palette: CatPalette) -> None:
@@ -448,11 +488,12 @@ def _paint_whiskers(
     palette: CatPalette,
     *,
     perked: bool = False,
+    twitch: float = 0.0,
 ) -> None:
     s = geometry.size
     painter.setPen(_pen(palette.whisker, 0.012 * s))
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    lift = -0.022 if perked else 0.0
+    lift = (-0.020 - 0.016 * twitch) if perked else 0.0
     for sign in (-1.0, 1.0):
         cx = lambda offset: 0.50 + sign * offset  # noqa: E731
         for y_start, y_ctrl, y_end in (

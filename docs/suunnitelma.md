@@ -124,7 +124,7 @@ Jokaisella vaiheella on oma yksityiskohtainen toteutussuunnitelmansa ja tehtäv�
 | **Vaihe 1** | Projektirunko, asetukset & kelluva kissa-avustin (silmät seuraavat hiirtä, `WS_EX_NOACTIVATE`, oikea klikki, Tray) | [vaihe1_runko_ja_kissa.md](vaiheet/vaihe1_runko_ja_kissa.md) | `Valmis` |
 | **Vaihe 2** | Komentotulkki, tekstinmuunnos, Win32 `SendInput`, ikkunanhallinta (`save t1`, fokus, piilotus) & sovelluskäynnistys | [vaihe2_windows_ohjaus_ja_syotto.md](vaiheet/vaihe2_windows_ohjaus_ja_syotto.md) | `Valmis` |
 | **Vaihe 3** | Jatkuva taustakuuntelu (`sounddevice`), VAD & vaihdettava STT (Selaintunnistus `fi-FI` / paikallinen `faster-whisper`) + puhekupla | [vaihe3_puheentunnistus_ja_kuuntelu.md](vaiheet/vaihe3_puheentunnistus_ja_kuuntelu.md) | `Valmis` |
-| **Vaihe 4** | Asetusikkuna (herätesana, välimerkit/näppäimet, sovellukset, ikkunat `t1`/`t2`, reaaliaikainen tapahtumaloki) | [vaihe4_asetus_ui_ja_loki.md](vaiheet/vaihe4_asetus_ui_ja_loki.md) | `Suunniteltu` |
+| **Vaihe 4** | Asetusikkuna (herätesana, välimerkit/näppäimet, sovellukset, ikkunat `t1`/`t2`, reaaliaikainen tapahtumaloki) | [vaihe4_asetus_ui_ja_loki.md](vaiheet/vaihe4_asetus_ui_ja_loki.md) | `Toteutettu – käyttäjän testaus kesken` |
 | **Vaihe 5** | Viimeistely, moninäyttö-/mikrofonivakaus, valinnainen automaattikäynnistys & Windows `.exe`-paketointi | [vaihe5_viimeistely_ja_paketointi.md](vaiheet/vaihe5_viimeistely_ja_paketointi.md) | `Suunniteltu` |
 
 ---

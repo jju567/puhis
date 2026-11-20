@@ -44,10 +44,17 @@ DEFAULT_KEYWORDS: dict[str, str] = {
     "huutomerkki": "!",
     "kaksoispiste": ":",
     "puolipiste": ";",
+    "plus": "+",
+    "miinus": "-",
+    "kertaa": "*",
+    "jaettuna": "/",
+    "yhtä kuin": "=",
     "enter": "{ENTER}",
     "rivinvaihto": "{ENTER}",
     "tab": "{TAB}",
+    "välilyönti": "{SPACE}",
     "pyyhi": "{BACKSPACE}",
+    "esc": "{ESCAPE}",
 }
 
 DEFAULT_APP_ALIASES: dict[str, list[str]] = {
@@ -153,11 +160,11 @@ def _parse_optional_int(value: Any) -> int | None:
 def _parse_keywords(value: Any, default: dict[str, str]) -> dict[str, str]:
     if not isinstance(value, dict):
         return dict(default)
-    return {
-        key.strip().lower(): output
-        for key, output in value.items()
-        if isinstance(key, str) and key.strip() and isinstance(output, str) and output
-    }
+    merged = dict(default)
+    for key, output in value.items():
+        if isinstance(key, str) and key.strip() and isinstance(output, str) and output:
+            merged[key.strip().lower()] = output
+    return merged
 
 
 def _parse_app_aliases(value: Any, default: dict[str, list[str]]) -> dict[str, list[str]]:

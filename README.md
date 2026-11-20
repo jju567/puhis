@@ -64,8 +64,14 @@ py -m venv .venv
 - **Tekstin- ja näppäinmuunnos** (`src/puhis/core/text_transformer.py`, `platform/keyboard_injector.py`):
   - Muuntaa välimerkki- ja näppäinavainsanat (`piste`, `pilkku`, `kysymysmerkki`, `huutomerkki`, `kaksoispiste`, `puolipiste`, `enter`, `rivinvaihto`, `tab`, `pyyhi`) `TextAction`- ja `KeyAction`-tapahtumiksi ja syöttää ne Win32 `SendInput`-rajapinnalla (`KEYEVENTF_UNICODE` + `VK_*`).
   - **Huomio Windowsin käyttöoikeuksista (UIPI):** Puhis ajetaan tavallisilla käyttäjäoikeuksilla, joten Windows estää `SendInput`-syötön järjestelmänvalvojana (Admin) ajettaviin ikkunoihin.
+- **Asetusikkuna ja tapahtumaloki** (`src/puhis/ui/settings_window.py`, `ui/tabs/`):
+  - Avautuu kissan tai Tray-kuvakkeen oikean klikin valikosta (**Asetukset ja hallinta…**).
+  - **Yleiset & Tunnistin:** herätesanan vaihto, puheentunnistimen valinta, kissan väriteema, koko ja aloitustila.
+  - **Omat avainsanat & näppäimet:** lisää, suodata, muokkaa ja poista omia puheavainsanoja sekä erikoisnäppäimiä (`{ENTER}`, `{TAB}`, `{BACKSPACE}`, `{SPACE}`, `{ESCAPE}`, `{DELETE}`, nuolinäppäimet).
+  - **Sallitut sovellukset:** lisää ja muokkaa puheella käynnistettäviä ohjelmia (`.exe`-selaimella). Kun ohjelma avataan puheella (`"puhis avaa muistio"`), sanelutila kytkeytyy suoraan päälle.
+  - **Ikkunat & Tapahtumaloki:** hallitse tallennettuja ikkunapaikkoja (`t1`, `t2`…) ja seuraa reaaliaikaista tapahtumalokia.
 - **Asetukset ja tallennussijainnit:**
-  - Asetukset: `%APPDATA%\puhis\config.json` (asetusikkuna tulee vaiheessa 4).
+  - Asetukset: `%APPDATA%\puhis\config.json` (muutokset tulevat voimaan lennossa).
   - Loki: `%LOCALAPPDATA%\puhis\logs\puhis.log`.
   - Whisper-mallit: `%LOCALAPPDATA%\puhis\models\`.
 

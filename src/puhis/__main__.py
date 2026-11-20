@@ -33,6 +33,9 @@ def configure_logging() -> None:
         # Sovelluksen pitää käynnistyä, vaikka lokihakemistoa ei voisi luoda.
         print(f"puhis: lokitiedostoa ei voitu avata ({exc})", file=sys.stderr)
     logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, handlers=handlers)
+    logging.getLogger("faster_whisper").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpx2").setLevel(logging.WARNING)
 
 
 def _log_uncaught(

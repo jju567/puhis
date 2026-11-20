@@ -68,7 +68,8 @@ puhis/
   - Ydinlogiikalle (`core/` / `domain/`) kirjoitetaan yksikkötestit.
   - Testit eivät saa koskaan muokata käyttäjän oikeita asetustiedostoja tai tuotantodataa — käytä testeissä aina eristettyjä väliaikaishakemistoja.
 - **`README.md` ajan tasalle:** Päivitä `README.md` aina, kun projektin rakenne, valittu teknologia, käännösohjeet tai julkiset ominaisuudet muuttuvat.
-- **Ennen committia (pakollinen tarkistus):**
+- **Ennen committia / buildia (pakollinen tarkistus):**
+  - **Kasvata versionumeroa joka buildilla:** Päivitä versionumero (`src/puhis/__init__.py` ja `pyproject.toml`, tai aja `.\.venv\Scripts\python.exe scripts\bump_version.py`) aina jokaisen uuden buildin/commitin yhteydessä.
   - Käytä virtuaaliympäristöä (`.venv\Scripts\python.exe`) tai `py`-komentoa.
   - Aja syntaksitarkistus: `.venv\Scripts\python.exe -m compileall -q src tests scripts`
   - Aja yksikkötestit: `.venv\Scripts\python.exe -m unittest discover -s tests -v`
