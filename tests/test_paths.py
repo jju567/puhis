@@ -14,6 +14,7 @@ class PathsTests(unittest.TestCase):
     def test_log_dir_uses_localappdata(self) -> None:
         with mock.patch.dict(os.environ, {"LOCALAPPDATA": r"D:\Local Ääkköset"}):
             self.assertEqual(paths.get_log_dir(), Path(r"D:\Local Ääkköset") / "puhis" / "logs")
+            self.assertEqual(paths.get_models_dir(), Path(r"D:\Local Ääkköset") / "puhis" / "models")
 
     def test_missing_env_falls_back_to_home(self) -> None:
         with mock.patch.dict(os.environ, {"APPDATA": "  "}):

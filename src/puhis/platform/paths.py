@@ -34,6 +34,11 @@ def get_log_dir() -> Path:
     return get_local_data_dir() / "logs"
 
 
+def get_models_dir() -> Path:
+    """Palauttaa Whisper-mallien paikallisen välimuistihakemiston polun."""
+    return get_local_data_dir() / "models"
+
+
 def ensure_dir(path: Path) -> Path:
     """Luo hakemiston tarvittaessa ja palauttaa sen."""
     path.mkdir(parents=True, exist_ok=True)
