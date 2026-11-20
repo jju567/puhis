@@ -8,7 +8,7 @@ import numpy as np
 
 DEFAULT_SAMPLE_RATE = 16_000
 NOISE_FLOOR_ALPHA = 0.95
-NOISE_FLOOR_MULTIPLIER = 2.2
+NOISE_FLOOR_MULTIPLIER = 3.0
 MAX_NOISE_FLOOR = 0.25
 
 
@@ -18,10 +18,10 @@ class VadConfig:
 
     sample_rate: int = DEFAULT_SAMPLE_RATE
     frame_duration_ms: int = 30
-    rms_threshold: float = 0.025
+    rms_threshold: float = 0.0035
     pre_roll_ms: int = 300
     min_speech_ms: int = 240
-    silence_duration_ms: int = 650
+    silence_duration_ms: int = 450
     max_utterance_ms: int = 8_000
 
     @property

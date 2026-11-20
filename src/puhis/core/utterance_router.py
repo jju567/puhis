@@ -53,10 +53,13 @@ class UtteranceRouter:
             )
 
         known_aliases = [entry.alias for entry in self._registry.list_entries()]
+        known_apps = list(self._config.app_aliases.keys())
         command = parse_command(
             text,
             wake_word=self._config.wake_word,
             known_window_aliases=known_aliases,
+            known_app_aliases=known_apps,
+            require_wake_word=(current_mode is not AssistantMode.COMMAND),
         )
         if command is not None:
             return self._execute_command(command)
@@ -69,6 +72,15 @@ class UtteranceRouter:
     def _execute_command(self, command: ParsedCommand) -> UtteranceResult:
         cmd_type = command.command_type
         target = command.target
+
+        if cmd_type is CommandType.WAKE:
+            logger.info("Herätesana tunnistettu -> kuuntelutila (COMMAND)")
+            return UtteranceResult(
+                handled=True,
+                success=True,
+                message="KUUNTELEN!",
+                new_mode=AssistantMode.COMMAND,
+            )
 
         if cmd_type is CommandType.START_DICTATION:
             logger.info("Komento: sanelu päälle")

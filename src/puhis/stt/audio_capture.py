@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 
 from puhis.stt.transcriber import TranscriberProtocol
-from puhis.stt.vad import EnergyVadSegmenter, VadConfig
+from puhis.stt.vad import EnergyVadSegmenter, VadConfig, compute_rms
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ STOP_JOIN_TIMEOUT_S = 2.0
 
 type UtteranceCallback = Callable[[str], None]
 type ErrorCallback = Callable[[str], None]
+type ProcessingCallback = Callable[[bool], None]
 type StreamFactory = Callable[[int, int, Callable[[np.ndarray], None]], AbstractContextManager[Any]]
 
 
@@ -55,12 +56,14 @@ class AudioListener:
         transcriber: TranscriberProtocol,
         on_utterance: UtteranceCallback,
         on_error: ErrorCallback | None = None,
+        on_processing: ProcessingCallback | None = None,
         vad_config: VadConfig | None = None,
         stream_factory: StreamFactory = _default_stream_factory,
     ) -> None:
         self._transcriber = transcriber
         self._on_utterance = on_utterance
         self._on_error = on_error
+        self._on_processing = on_processing
         self._vad = EnergyVadSegmenter(vad_config)
         self._stream_factory = stream_factory
 
@@ -167,10 +170,17 @@ class AudioListener:
                     break
 
     def _transcribe_and_emit(self, segment: np.ndarray, sample_rate: int) -> None:
+        duration_s = segment.size / max(1, sample_rate)
+        rms = compute_rms(segment)
+        logger.info("Puhejakso havaittu (%.1f s, rms=%.4f), tunnistetaan...", duration_s, rms)
+        if self._on_processing is not None:
+            self._on_processing(True)
         try:
             text = self._transcriber.transcribe(segment, sample_rate=sample_rate).strip()
         except Exception as exc:
             logger.exception("Puheentunnistus epäonnistui")
+            if self._on_processing is not None:
+                self._on_processing(False)
             if self._on_error is not None:
                 self._on_error(f"Puheentunnistusvirhe: {exc}")
             return
@@ -178,6 +188,10 @@ class AudioListener:
         if text:
             logger.info("Tunnistettu puhe: %r", text)
             self._on_utterance(text)
+        else:
+            logger.info("Puhejaksosta ei tunnistettu sanoja")
+            if self._on_processing is not None:
+                self._on_processing(False)
 
     def _drain_queue(self) -> None:
         while True:

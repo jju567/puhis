@@ -4,8 +4,8 @@ import logging
 import math
 import random
 
-from PySide6.QtCore import QPoint, QPointF, Qt, QTimer, Signal
-from PySide6.QtGui import QContextMenuEvent, QCursor, QHideEvent, QMouseEvent, QPainter, QPaintEvent, QShowEvent
+from PySide6.QtCore import QPoint, QPointF, QRect, Qt, QTimer, Signal
+from PySide6.QtGui import QContextMenuEvent, QCursor, QHideEvent, QMouseEvent, QMoveEvent, QPainter, QPaintEvent, QShowEvent
 from PySide6.QtWidgets import QApplication, QWidget
 
 from puhis.core.app_state import AssistantMode
@@ -32,6 +32,7 @@ class CatWidget(QWidget):
     clicked = Signal()
     context_menu_requested = Signal(QPoint)
     position_committed = Signal(QPoint)
+    geometry_changed = Signal(QRect)
 
     def __init__(self, size: int, theme: CatTheme = CatTheme.CHARCOAL) -> None:
         flags = (
@@ -50,6 +51,9 @@ class CatWidget(QWidget):
         self._geometry = CatGeometry(float(size))
         self._mode = AssistantMode.IDLE
         self._theme = theme
+        self._badge_text = ""
+        self._processing = False
+        self._spinner_angle = 0.0
         self._pupils: tuple[Offset, Offset] = ((0.0, 0.0), (0.0, 0.0))
         self._blinking = False
         self._pulse_phase = 0.0
@@ -79,6 +83,20 @@ class CatWidget(QWidget):
         self._theme = theme
         self.update()
 
+    def set_badge_text(self, text: str) -> None:
+        """Asettaa kissan päällä näytettävän lyhyen tilatekstin (esim. 'KUUNTELEN!')."""
+        if text == self._badge_text:
+            return
+        self._badge_text = text
+        self.update()
+
+    def set_processing(self, processing: bool) -> None:
+        """Näyttää tai piilottaa puheentunnistuksen pyörivän tulkkausanimaation."""
+        if processing is self._processing:
+            return
+        self._processing = processing
+        self.update()
+
     # --- Qt-tapahtumat -------------------------------------------------
 
     def showEvent(self, event: QShowEvent) -> None:
@@ -88,6 +106,11 @@ class CatWidget(QWidget):
             logger.warning("Kelluvan ikkunan Win32-tyylien asetus epäonnistui")
         self._gaze_timer.start()
         self._schedule_next_blink()
+        self.geometry_changed.emit(self.geometry())
+
+    def moveEvent(self, event: QMoveEvent) -> None:
+        super().moveEvent(event)
+        self.geometry_changed.emit(self.geometry())
 
     def hideEvent(self, event: QHideEvent) -> None:
         self._gaze_timer.stop()
@@ -106,6 +129,9 @@ class CatWidget(QWidget):
                 theme=self._theme,
                 blinking=self._blinking,
                 halo_pulse=pulse,
+                badge_text=self._badge_text,
+                processing=self._processing,
+                spinner_angle_deg=self._spinner_angle,
             )
         finally:
             painter.end()
@@ -148,8 +174,10 @@ class CatWidget(QWidget):
         if self._mode is AssistantMode.MUTED:
             return
         needs_repaint = False
-        if self._mode in _PULSING_MODES:
+        if self._mode in _PULSING_MODES or self._processing:
             self._pulse_phase = (self._pulse_phase + 0.14) % (2.0 * math.pi)
+            if self._processing:
+                self._spinner_angle = (self._spinner_angle - 18.0) % 360.0
             needs_repaint = True
 
         # QCursor.pos() palauttaa loogiset koordinaatit samassa järjestelmässä kuin

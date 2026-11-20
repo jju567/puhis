@@ -138,6 +138,18 @@ class UtteranceRouterTests(unittest.TestCase):
         self.assertFalse(fail_res.success)
         self.assertEqual(self.keyboard.sent_batches, [])
 
+    def test_two_step_wake_word_then_command_without_wake_word(self) -> None:
+        wake_res = self.router.handle_utterance("puis", AssistantMode.IDLE)
+        self.assertTrue(wake_res.handled)
+        self.assertTrue(wake_res.success)
+        self.assertIs(wake_res.new_mode, AssistantMode.COMMAND)
+        self.assertEqual(wake_res.message, "KUUNTELEN!")
+
+        cmd_res = self.router.handle_utterance("avaa laskin", AssistantMode.COMMAND)
+        self.assertTrue(cmd_res.handled)
+        self.assertTrue(cmd_res.success)
+        self.assertEqual(self.launcher.launched, ["laskin"])
+
 
 if __name__ == "__main__":
     unittest.main()

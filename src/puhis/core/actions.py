@@ -66,6 +66,7 @@ type InputAction = TextAction | KeyAction
 class CommandType(StrEnum):
     """Herätesanalla alkavan komennon tyyppi."""
 
+    WAKE = "wake"
     START_DICTATION = "start_dictation"
     STOP_DICTATION = "stop_dictation"
     MUTE = "mute"

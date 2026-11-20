@@ -16,8 +16,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MODEL_SIZE = "small"
 DEFAULT_COMPUTE_TYPE = "int8"
 DEFAULT_LANGUAGE = "fi"
-# Jätetään puolet prosessoriytimistä vapaaksi Windowsille ja muille ohjelmille.
-DEFAULT_CPU_THREADS = 2
+DEFAULT_CPU_THREADS = 4
 MAX_NO_SPEECH_PROB = 0.75
 
 
@@ -137,17 +136,31 @@ class FasterWhisperTranscriber:
             raise ValueError(f"Whisper odottaa {DEFAULT_SAMPLE_RATE} Hz ääntä, saatiin {sample_rate} Hz")
 
         self.load_model()
+        normalized = normalize_audio(samples)
         segments, _info = self._model.transcribe(
-            samples,
+            normalized,
             language=self._language,
             beam_size=1,
             best_of=1,
             temperature=0.0,
             condition_on_previous_text=False,
-            vad_filter=False,
+            without_timestamps=True,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 300, "speech_pad_ms": 200},
             initial_prompt=self._initial_prompt or None,
         )
         return _collect_segments_text(segments)
+
+
+def normalize_audio(samples: np.ndarray, target_peak: float = 0.7, max_gain: float = 20.0) -> np.ndarray:
+    """Vahvistaa hiljaisen mikrofonisignaalin sopivalle tasolle Whisperiä varten."""
+    if samples.size == 0:
+        return samples
+    peak = float(np.max(np.abs(samples)))
+    if peak <= 1e-4 or peak >= target_peak:
+        return samples
+    gain = min(max_gain, target_peak / peak)
+    return np.clip(samples * gain, -1.0, 1.0).astype(np.float32, copy=False)
 
 
 def _collect_segments_text(segments: Iterable[Any]) -> str:

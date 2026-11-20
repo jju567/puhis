@@ -129,13 +129,63 @@ class CommandParserTests(unittest.TestCase):
         self.assertEqual(multi.target, "t1")
 
     def test_parse_command_marks_incomplete_or_unrecognized_as_unknown(self) -> None:
-        cases = ["puhis", "puhis save", "puhis fokus", "puhis avaa", "puhis keitä kahvia"]
+        cases = ["puhis save", "puhis fokus", "puhis avaa", "puhis keitä kahvia"]
         for text in cases:
             with self.subTest(text=text):
                 result = parse_command(text)
                 self.assertIsNotNone(result)
                 assert result is not None
                 self.assertIs(result.command_type, CommandType.UNKNOWN)
+
+    def test_parse_command_wake_word_alone_returns_wake_command(self) -> None:
+        for text in ("puhis", "Puis!", "puhi?", "puis, puis"):
+            with self.subTest(text=text):
+                result = parse_command(text)
+                self.assertIsNotNone(result)
+                assert result is not None
+                self.assertIs(result.command_type, CommandType.WAKE)
+
+    def test_parse_command_fuzzy_wake_words_and_repeated_wake_word(self) -> None:
+        repeated = parse_command("puis, puis, avaa, laskin.", known_app_aliases={"laskin", "muistio"})
+        fuzzy_save = parse_command("puhi save t1")
+        fuzzy_focus = parse_command("puuhis t1")
+        fuzzy_dictate = parse_command("buhis sanele")
+        fuzzy_inflected = parse_command("puis avaa laskimen", known_app_aliases={"laskin", "muistio"})
+
+        self.assertIsNotNone(repeated)
+        assert repeated is not None
+        self.assertIs(repeated.command_type, CommandType.LAUNCH_APP)
+        self.assertEqual(repeated.target, "laskin")
+
+        self.assertIsNotNone(fuzzy_save)
+        assert fuzzy_save is not None
+        self.assertIs(fuzzy_save.command_type, CommandType.SAVE_WINDOW)
+        self.assertEqual(fuzzy_save.target, "t1")
+
+        self.assertIsNotNone(fuzzy_focus)
+        assert fuzzy_focus is not None
+        self.assertIs(fuzzy_focus.command_type, CommandType.FOCUS_WINDOW)
+        self.assertEqual(fuzzy_focus.target, "t1")
+
+        self.assertIsNotNone(fuzzy_dictate)
+        assert fuzzy_dictate is not None
+        self.assertIs(fuzzy_dictate.command_type, CommandType.START_DICTATION)
+
+        self.assertIsNotNone(fuzzy_inflected)
+        assert fuzzy_inflected is not None
+        self.assertIs(fuzzy_inflected.command_type, CommandType.LAUNCH_APP)
+        self.assertEqual(fuzzy_inflected.target, "laskin")
+
+    def test_parse_command_without_wake_word_when_already_awake(self) -> None:
+        cmd = parse_command(
+            "kamaa laskin",
+            known_app_aliases={"laskin", "muistio"},
+            require_wake_word=False,
+        )
+        self.assertIsNotNone(cmd)
+        assert cmd is not None
+        self.assertIs(cmd.command_type, CommandType.LAUNCH_APP)
+        self.assertEqual(cmd.target, "laskin")
 
 
 if __name__ == "__main__":

@@ -82,11 +82,17 @@ CAT_THEMES: dict[CatTheme, CatPalette] = {
 MODE_RING_COLORS: dict[AssistantMode, QColor] = {
     AssistantMode.IDLE: QColor("#8E9AAF"),
     AssistantMode.DICTATING: QColor("#2ECC71"),
-    AssistantMode.COMMAND: QColor("#6C7CFF"),
+    AssistantMode.COMMAND: QColor("#00E676"),
     AssistantMode.MUTED: QColor("#6B7280"),
     AssistantMode.ERROR: QColor("#F05A3C"),
 }
 
+ALERT_IRIS_COLOR = QColor("#34D399")
+PROCESSING_COLOR = QColor("#FBBF24")
+PROCESSING_SECONDARY_COLOR = QColor("#38BDF8")
+BADGE_BG_COMMAND = QColor(5, 150, 105, 240)
+BADGE_BG_PROCESSING = QColor(217, 119, 6, 240)
+BADGE_BG_ERROR = QColor(220, 38, 38, 240)
 EYE_HIGHLIGHT = QColor("#FFFFFF")
 
 
@@ -130,6 +136,9 @@ def paint_cat(
     *,
     blinking: bool = False,
     halo_pulse: float = 0.5,
+    badge_text: str = "",
+    processing: bool = False,
+    spinner_angle_deg: float = 0.0,
 ) -> None:
     """Piirtää kissan annettuun maalariin."""
     painter.save()
@@ -137,7 +146,15 @@ def paint_cat(
     palette = CAT_THEMES.get(theme, CAT_THEMES[CatTheme.CHARCOAL])
     ring_color = MODE_RING_COLORS.get(mode, MODE_RING_COLORS[AssistantMode.IDLE])
 
-    _paint_ring(painter, geometry, mode, ring_color, halo_pulse)
+    _paint_ring(
+        painter,
+        geometry,
+        mode,
+        ring_color,
+        halo_pulse,
+        processing=processing,
+        spinner_angle_deg=spinner_angle_deg,
+    )
     _paint_drop_shadow(painter, geometry)
     _paint_ears(painter, geometry, palette)
     _paint_head(painter, geometry, palette)
@@ -145,15 +162,40 @@ def paint_cat(
     if mode is AssistantMode.MUTED or blinking:
         _paint_closed_eyes(painter, geometry, palette)
     else:
-        _paint_eyes(painter, geometry, palette, left_pupil, right_pupil, worried=mode is AssistantMode.ERROR)
+        _paint_eyes(
+            painter,
+            geometry,
+            palette,
+            left_pupil,
+            right_pupil,
+            worried=mode is AssistantMode.ERROR,
+            alert=mode is AssistantMode.COMMAND or processing,
+        )
 
     _paint_nose_and_mouth(painter, geometry, palette, mode)
-    _paint_whiskers(painter, geometry, palette)
+    _paint_whiskers(
+        painter,
+        geometry,
+        palette,
+        perked=mode in (AssistantMode.COMMAND, AssistantMode.DICTATING) or processing,
+    )
 
     if mode is AssistantMode.MUTED:
         _paint_zzz(painter, geometry)
     elif mode is AssistantMode.ERROR:
         _paint_error_badge(painter, geometry, ring_color)
+
+    active_badge = badge_text or (
+        "TULKATAAN…" if processing else ("KUUNTELEN!" if mode is AssistantMode.COMMAND else "")
+    )
+    if active_badge:
+        _paint_status_pill(
+            painter,
+            geometry,
+            active_badge,
+            is_error=mode is AssistantMode.ERROR,
+            is_processing=processing and not badge_text,
+        )
 
     painter.restore()
 
@@ -187,24 +229,42 @@ def _paint_ring(
     mode: AssistantMode,
     color: QColor,
     halo_pulse: float,
+    *,
+    processing: bool = False,
+    spinner_angle_deg: float = 0.0,
 ) -> None:
     s = geometry.size
     ring_rect = QRectF(0.06 * s, 0.08 * s, 0.88 * s, 0.88 * s)
 
-    if mode in (AssistantMode.DICTATING, AssistantMode.COMMAND, AssistantMode.ERROR):
-        glow_alpha = int(55 + 45 * max(0.0, min(1.0, halo_pulse)))
-        for spread, alpha_scale in ((0.032, 0.45), (0.016, 0.8)):
-            glow = QColor(color)
+    if mode in (AssistantMode.DICTATING, AssistantMode.COMMAND, AssistantMode.ERROR) or processing:
+        base_glow_color = PROCESSING_COLOR if processing else color
+        glow_alpha = int(75 + 65 * max(0.0, min(1.0, halo_pulse)))
+        for spread, alpha_scale in ((0.046, 0.50), (0.024, 0.85)):
+            glow = QColor(base_glow_color)
             glow.setAlpha(int(glow_alpha * alpha_scale))
             painter.setPen(_pen(glow, spread * s))
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(ring_rect)
 
     stroke = QColor(color)
-    stroke.setAlpha(110 if mode in (AssistantMode.IDLE, AssistantMode.MUTED) else 235)
-    painter.setPen(_pen(stroke, 0.022 * s))
+    stroke.setAlpha(110 if mode in (AssistantMode.IDLE, AssistantMode.MUTED) else 255)
+    ring_width = 0.036 * s if mode is AssistantMode.COMMAND else 0.024 * s
+    painter.setPen(_pen(stroke, ring_width))
     painter.setBrush(Qt.BrushStyle.NoBrush)
     painter.drawEllipse(ring_rect)
+
+    if mode is AssistantMode.COMMAND:
+        inner_rect = QRectF(0.105 * s, 0.125 * s, 0.79 * s, 0.79 * s)
+        inner_color = QColor("#A7F3D0")
+        inner_color.setAlpha(210)
+        painter.setPen(_pen(inner_color, 0.015 * s))
+        painter.drawEllipse(inner_rect)
+
+    if processing:
+        painter.setPen(_pen(PROCESSING_COLOR, 0.038 * s))
+        painter.drawArc(ring_rect, int(spinner_angle_deg * 16), 110 * 16)
+        painter.setPen(_pen(PROCESSING_SECONDARY_COLOR, 0.032 * s))
+        painter.drawArc(ring_rect, int(((spinner_angle_deg + 180.0) % 360.0) * 16), 80 * 16)
 
 
 def _head_path(geometry: CatGeometry) -> QPainterPath:
@@ -286,13 +346,17 @@ def _paint_eyes(
     right_pupil: Offset,
     *,
     worried: bool,
+    alert: bool = False,
 ) -> None:
-    r, pr = geometry.eye_radius, geometry.pupil_radius
+    scale = 1.16 if alert else 1.0
+    r = geometry.eye_radius * scale
+    pr = geometry.pupil_radius * (1.10 if alert else 1.0)
+    iris_color = ALERT_IRIS_COLOR if alert else palette.eye_iris
     for is_left, (center, (ox, oy)) in enumerate(
         ((geometry.left_eye, left_pupil), (geometry.right_eye, right_pupil))
     ):
-        painter.setPen(_pen(palette.outline, 0.012 * geometry.size))
-        painter.setBrush(palette.eye_iris)
+        painter.setPen(_pen(palette.outline, 0.013 * geometry.size))
+        painter.setBrush(iris_color)
         painter.drawEllipse(center, r, r)
 
         pupil = QPointF(center.x() + ox, center.y() + oy)
@@ -302,8 +366,8 @@ def _paint_eyes(
 
         # Kaksi pientä heijastusta luo kiiltävän ja elävän katseen.
         painter.setBrush(EYE_HIGHLIGHT)
-        painter.drawEllipse(QPointF(pupil.x() - pr * 0.34, pupil.y() - pr * 0.36), pr * 0.34, pr * 0.34)
-        painter.drawEllipse(QPointF(pupil.x() + pr * 0.28, pupil.y() + pr * 0.30), pr * 0.14, pr * 0.14)
+        painter.drawEllipse(QPointF(pupil.x() - pr * 0.34, pupil.y() - pr * 0.36), pr * 0.36, pr * 0.36)
+        painter.drawEllipse(QPointF(pupil.x() + pr * 0.28, pupil.y() + pr * 0.30), pr * 0.16, pr * 0.16)
 
         if worried:
             _paint_worried_brow(painter, geometry, palette, center, left=is_left == 0)
@@ -357,17 +421,18 @@ def _paint_nose_and_mouth(
         painter.drawPath(frown)
         return
 
-    if mode is AssistantMode.DICTATING:
-        # Iloinen avoin hymy sanelutilassa.
-        smile = QPainterPath(geometry.p(0.445, 0.665))
-        smile.quadTo(geometry.p(0.50, 0.745), geometry.p(0.555, 0.665))
+    if mode in (AssistantMode.DICTATING, AssistantMode.COMMAND):
+        # Iloinen avoin hymy sanelutilassa ja kun Puhis kuulee nimensä.
+        mouth_depth = 0.760 if mode is AssistantMode.COMMAND else 0.745
+        smile = QPainterPath(geometry.p(0.438, 0.662))
+        smile.quadTo(geometry.p(0.50, mouth_depth), geometry.p(0.562, 0.662))
         smile.closeSubpath()
         painter.setBrush(palette.outline)
         painter.drawPath(smile)
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(palette.tongue)
-        painter.drawEllipse(QRectF(0.472 * s, 0.688 * s, 0.056 * s, 0.032 * s))
+        painter.drawEllipse(QRectF(0.468 * s, 0.686 * s, 0.064 * s, 0.036 * s))
         return
 
     mouth = QPainterPath(geometry.p(0.50, 0.640))
@@ -377,20 +442,57 @@ def _paint_nose_and_mouth(
     painter.drawPath(mouth)
 
 
-def _paint_whiskers(painter: QPainter, geometry: CatGeometry, palette: CatPalette) -> None:
+def _paint_whiskers(
+    painter: QPainter,
+    geometry: CatGeometry,
+    palette: CatPalette,
+    *,
+    perked: bool = False,
+) -> None:
     s = geometry.size
     painter.setPen(_pen(palette.whisker, 0.012 * s))
     painter.setBrush(Qt.BrushStyle.NoBrush)
+    lift = -0.022 if perked else 0.0
     for sign in (-1.0, 1.0):
         cx = lambda offset: 0.50 + sign * offset  # noqa: E731
         for y_start, y_ctrl, y_end in (
-            (0.605, 0.590, 0.585),
-            (0.635, 0.635, 0.645),
-            (0.665, 0.680, 0.700),
+            (0.605 + lift, 0.590 + lift * 0.5, 0.585),
+            (0.635 + lift, 0.635 + lift * 0.5, 0.645),
+            (0.665 + lift, 0.680 + lift * 0.5, 0.700),
         ):
             path = QPainterPath(geometry.p(cx(0.20), y_start))
             path.quadTo(geometry.p(cx(0.31), y_ctrl), geometry.p(cx(0.40), y_end))
             painter.drawPath(path)
+
+
+def _paint_status_pill(
+    painter: QPainter,
+    geometry: CatGeometry,
+    text: str,
+    *,
+    is_error: bool = False,
+    is_processing: bool = False,
+) -> None:
+    """Piirtää selkeän tilapillerin kissan alareunaan, kun Puhis kuulee nimensä."""
+    s = geometry.size
+    rect = QRectF(0.04 * s, 0.78 * s, 0.92 * s, 0.19 * s)
+    radius = 0.09 * s
+
+    painter.setPen(_pen(EYE_HIGHLIGHT, 0.016 * s))
+    if is_error:
+        bg = BADGE_BG_ERROR
+    elif is_processing:
+        bg = BADGE_BG_PROCESSING
+    else:
+        bg = BADGE_BG_COMMAND
+    painter.setBrush(bg)
+    painter.drawRoundedRect(rect, radius, radius)
+
+    painter.setPen(EYE_HIGHLIGHT)
+    font = QFont("Segoe UI", max(6, int(0.082 * s)), QFont.Weight.Bold)
+    painter.setFont(font)
+    display = text if len(text) <= 14 else text[:13] + "…"
+    painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, display)
 
 
 def _paint_zzz(painter: QPainter, geometry: CatGeometry) -> None:
