@@ -53,6 +53,7 @@ class CatWidget(QWidget):
         self._theme = theme
         self._badge_text = ""
         self._processing = False
+        self._sleeping = False
         self._spinner_angle = 0.0
         self._pupils: tuple[Offset, Offset] = ((0.0, 0.0), (0.0, 0.0))
         self._blinking = False
@@ -106,6 +107,13 @@ class CatWidget(QWidget):
         self._processing = processing
         self.update()
 
+    def set_sleeping(self, sleeping: bool) -> None:
+        """Asettaa kissan nukkumaan alustuksen ajaksi tai herättää sen."""
+        if sleeping is self._sleeping:
+            return
+        self._sleeping = sleeping
+        self.update()
+
     # --- Qt-tapahtumat -------------------------------------------------
 
     def showEvent(self, event: QShowEvent) -> None:
@@ -141,6 +149,7 @@ class CatWidget(QWidget):
                 badge_text=self._badge_text,
                 processing=self._processing,
                 spinner_angle_deg=self._spinner_angle,
+                sleeping=self._sleeping,
             )
         finally:
             painter.end()
@@ -180,7 +189,7 @@ class CatWidget(QWidget):
     # --- Sisäiset ------------------------------------------------------
 
     def _on_tick(self) -> None:
-        if self._mode is AssistantMode.MUTED:
+        if self._mode is AssistantMode.MUTED or self._sleeping:
             return
         needs_repaint = False
         if self._mode in _PULSING_MODES or self._processing:

@@ -35,6 +35,7 @@ class AudioCaptureTests(unittest.TestCase):
     def test_listener_processes_speech_segment_and_stops_cleanly(self) -> None:
         received: list[str] = []
         done = threading.Event()
+        ready = threading.Event()
         transcriber = _FakeTranscriber("puhis save t1")
 
         @contextmanager
@@ -52,11 +53,13 @@ class AudioCaptureTests(unittest.TestCase):
         listener = AudioListener(
             transcriber=transcriber,
             on_utterance=on_utterance,
+            on_ready=ready.set,
             vad_config=self.vad_config,
             stream_factory=fake_stream,
         )
         listener.start()
         try:
+            self.assertTrue(ready.wait(timeout=2.0))
             speech = np.full(self.frame_len * 3, 0.1, dtype=np.float32)
             silence = np.zeros(self.frame_len * 3, dtype=np.float32)
             listener.enqueue_audio(np.concatenate((speech, silence)))

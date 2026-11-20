@@ -37,6 +37,7 @@ class AppController(QObject):
     utterance_received = Signal(str)
     listener_error = Signal(str)
     processing_changed = Signal(bool)
+    listener_ready = Signal()
 
     def __init__(
         self,
@@ -77,6 +78,7 @@ class AppController(QObject):
                 on_utterance=self.utterance_received.emit,
                 on_error=self.listener_error.emit,
                 on_processing=self.processing_changed.emit,
+                on_ready=self.listener_ready.emit,
             )
 
         self._cat = CatWidget(self._config.cat_size, theme=self._config.cat_theme)
@@ -102,6 +104,9 @@ class AppController(QObject):
             logger.warning("Windowsin ilmaisinalue ei ole käytettävissä")
         self._apply_mode(self._mode)
         if self._listener is not None:
+            # Kissa nukkuu, kunnes mikrofoni ja puheentunnistin ovat valmiina.
+            self._cat.set_sleeping(True)
+            self._cat.setToolTip("Puhis – Käynnistetään mikrofonia…")
             self._listener.start()
         logger.info("puhis käynnistetty tilassa %s", self._mode.value)
 
@@ -204,6 +209,7 @@ class AppController(QObject):
         self.utterance_received.connect(self._on_utterance_signal)
         self.listener_error.connect(self._on_listener_error)
         self.processing_changed.connect(self._on_processing_changed)
+        self.listener_ready.connect(self._on_listener_ready)
 
     # --- Toiminnot -----------------------------------------------------
 
@@ -220,10 +226,16 @@ class AppController(QObject):
         elif self._mode is AssistantMode.COMMAND and not self._flash_timer.isActive():
             self._flash_timer.start(WAKE_WINDOW_MS // 2)
 
+    def _on_listener_ready(self) -> None:
+        self._cat.set_sleeping(False)
+        self._cat.setToolTip("Puhis")
+        logger.info("Puhis heräsi kuuntelemaan (tila=%s)", self._mode.value)
+
     def _on_listener_error(self, message: str) -> None:
         logger.error("Taustakuuntelun virhe: %s", message)
         self._flash_timer.stop()
         self._flash_restore_mode = None
+        self._cat.set_sleeping(False)
         self._cat.set_processing(False)
         self._cat.setToolTip(f"Puhis – {message}")
         self._apply_mode(AssistantMode.ERROR)

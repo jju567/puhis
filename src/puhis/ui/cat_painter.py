@@ -139,25 +139,27 @@ def paint_cat(
     badge_text: str = "",
     processing: bool = False,
     spinner_angle_deg: float = 0.0,
+    sleeping: bool = False,
 ) -> None:
     """Piirtää kissan annettuun maalariin."""
     painter.save()
     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
     palette = CAT_THEMES.get(theme, CAT_THEMES[CatTheme.CHARCOAL])
-    ring_color = MODE_RING_COLORS.get(mode, MODE_RING_COLORS[AssistantMode.IDLE])
+    effective_mode = AssistantMode.MUTED if sleeping else mode
+    ring_color = MODE_RING_COLORS.get(effective_mode, MODE_RING_COLORS[AssistantMode.IDLE])
 
     _paint_ring(
         painter,
         geometry,
-        mode,
+        effective_mode,
         ring_color,
         halo_pulse,
-        processing=processing,
+        processing=processing and not sleeping,
         spinner_angle_deg=spinner_angle_deg,
     )
 
-    perk = (0.55 + 0.45 * max(0.0, min(1.0, halo_pulse))) if processing else (
-        0.45 if mode is AssistantMode.COMMAND else 0.0
+    perk = (0.55 + 0.45 * max(0.0, min(1.0, halo_pulse))) if (processing and not sleeping) else (
+        0.45 if effective_mode is AssistantMode.COMMAND else 0.0
     )
     painter.save()
     if perk > 0.0:
@@ -168,7 +170,7 @@ def paint_cat(
     _paint_ears(painter, geometry, palette, ear_perk=perk)
     _paint_head(painter, geometry, palette)
 
-    if mode is AssistantMode.MUTED or blinking:
+    if effective_mode is AssistantMode.MUTED or blinking:
         _paint_closed_eyes(painter, geometry, palette)
     else:
         _paint_eyes(
@@ -177,34 +179,34 @@ def paint_cat(
             palette,
             left_pupil,
             right_pupil,
-            worried=mode is AssistantMode.ERROR,
-            alert=mode is AssistantMode.COMMAND or processing,
+            worried=effective_mode is AssistantMode.ERROR,
+            alert=effective_mode is AssistantMode.COMMAND or processing,
         )
 
-    _paint_nose_and_mouth(painter, geometry, palette, mode)
+    _paint_nose_and_mouth(painter, geometry, palette, effective_mode)
     _paint_whiskers(
         painter,
         geometry,
         palette,
-        perked=mode in (AssistantMode.COMMAND, AssistantMode.DICTATING) or processing,
-        twitch=perk if processing else 0.0,
+        perked=effective_mode in (AssistantMode.COMMAND, AssistantMode.DICTATING) or (processing and not sleeping),
+        twitch=perk if (processing and not sleeping) else 0.0,
     )
-    if processing:
+    if processing and not sleeping:
         _paint_ear_attention_waves(painter, geometry, halo_pulse)
     painter.restore()
 
-    if mode is AssistantMode.MUTED:
+    if effective_mode is AssistantMode.MUTED:
         _paint_zzz(painter, geometry)
-    elif mode is AssistantMode.ERROR:
+    elif effective_mode is AssistantMode.ERROR:
         _paint_error_badge(painter, geometry, ring_color)
 
-    active_badge = badge_text or ("KUUNTELEN!" if mode is AssistantMode.COMMAND else "")
+    active_badge = "" if sleeping else (badge_text or ("KUUNTELEN!" if effective_mode is AssistantMode.COMMAND else ""))
     if active_badge:
         _paint_status_pill(
             painter,
             geometry,
             active_badge,
-            is_error=mode is AssistantMode.ERROR,
+            is_error=effective_mode is AssistantMode.ERROR,
         )
 
     painter.restore()

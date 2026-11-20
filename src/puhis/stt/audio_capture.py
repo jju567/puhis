@@ -24,6 +24,7 @@ STOP_JOIN_TIMEOUT_S = 2.0
 type UtteranceCallback = Callable[[str], None]
 type ErrorCallback = Callable[[str], None]
 type ProcessingCallback = Callable[[bool], None]
+type ReadyCallback = Callable[[], None]
 type StreamFactory = Callable[[int, int, Callable[[np.ndarray], None]], AbstractContextManager[Any]]
 
 
@@ -57,6 +58,7 @@ class AudioListener:
         on_utterance: UtteranceCallback,
         on_error: ErrorCallback | None = None,
         on_processing: ProcessingCallback | None = None,
+        on_ready: ReadyCallback | None = None,
         vad_config: VadConfig | None = None,
         stream_factory: StreamFactory = _default_stream_factory,
     ) -> None:
@@ -64,6 +66,7 @@ class AudioListener:
         self._on_utterance = on_utterance
         self._on_error = on_error
         self._on_processing = on_processing
+        self._on_ready = on_ready
         self._vad = EnergyVadSegmenter(vad_config)
         self._stream_factory = stream_factory
 
@@ -138,6 +141,8 @@ class AudioListener:
 
             with self._stream_factory(sample_rate, block_size, self.enqueue_audio):
                 logger.info("Mikrofonikuuntelu käynnistyi (%d Hz)", sample_rate)
+                if self._on_ready is not None:
+                    self._on_ready()
                 self._process_loop(sample_rate)
         except Exception as exc:
             logger.exception("Mikrofonikuuntelun käynnistys tai ajo epäonnistui")
