@@ -64,18 +64,44 @@ def normalize_audio(samples: np.ndarray, target_peak: float = 0.7, max_gain: flo
     return np.clip(samples * gain, -1.0, 1.0).astype(np.float32, copy=False)
 
 
-def _default_web_recognize(pcm16_bytes: bytes, sample_rate: int, language: str) -> str:
+def _default_web_recognize(pcm16_bytes: bytes, sample_rate: int, language: str) -> list[str]:
     import speech_recognition as sr
 
     recognizer = sr.Recognizer()
     audio_data = sr.AudioData(pcm16_bytes, sample_rate, 2)
     try:
-        result = recognizer.recognize_google(audio_data, language=language)
-        return str(result).strip()
+        raw = recognizer.recognize_google(audio_data, language=language, show_all=True)
     except sr.UnknownValueError:
-        return ""
+        return []
     except sr.RequestError as exc:
         raise OSError(f"Selaintunnistuspalvelu ei vastaa: {exc}") from exc
+
+    return _extract_google_alternatives(raw)
+
+
+def _extract_google_alternatives(raw: Any) -> list[str]:
+    if isinstance(raw, str):
+        cleaned = raw.strip()
+        return [cleaned] if cleaned else []
+    if not isinstance(raw, dict):
+        return []
+    alts = raw.get("alternative")
+    if not isinstance(alts, list):
+        return []
+
+    seen: set[str] = set()
+    results: list[str] = []
+    for entry in alts:
+        if not isinstance(entry, dict):
+            continue
+        transcript = entry.get("transcript")
+        if not isinstance(transcript, str):
+            continue
+        cleaned = transcript.strip()
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            results.append(cleaned)
+    return results
 
 
 class GoogleWebSpeechTranscriber:
@@ -84,7 +110,7 @@ class GoogleWebSpeechTranscriber:
     def __init__(
         self,
         language: str = DEFAULT_WEB_LANGUAGE,
-        recognize_fn: Callable[[bytes, int, str], str] = _default_web_recognize,
+        recognize_fn: Callable[[bytes, int, str], list[str] | str] = _default_web_recognize,
     ) -> None:
         self._language = language
         self._recognize_fn = recognize_fn
@@ -93,16 +119,29 @@ class GoogleWebSpeechTranscriber:
         """Selaintunnistin ei vaadi paikallisen mallin latausta."""
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = DEFAULT_SAMPLE_RATE) -> str:
-        """Lähettää vahvistetun 16-bit PCM-äänen Google Web Speech (`fi-FI`) -tunnistukseen."""
+        """Palauttaa parhaan ehdokkaan Google Web Speech (`fi-FI`) -tunnistuksesta."""
+        candidates = self.transcribe_candidates(audio, sample_rate=sample_rate)
+        return candidates[0] if candidates else ""
+
+    def transcribe_candidates(
+        self,
+        audio: np.ndarray,
+        sample_rate: int = DEFAULT_SAMPLE_RATE,
+    ) -> list[str]:
+        """Lähettää vahvistetun 16-bit PCM-äänen Google Web Speechiin ja palauttaa ehdokkaat."""
         samples = np.asarray(audio, dtype=np.float32).reshape(-1)
         if samples.size == 0:
-            return ""
+            return []
         if sample_rate <= 0:
             raise ValueError(f"Virheellinen näytteenottotaajuus: {sample_rate}")
 
         normalized = normalize_audio(samples)
         pcm16 = (np.clip(normalized, -1.0, 1.0) * 32767.0).astype(np.int16)
-        return self._recognize_fn(pcm16.tobytes(), sample_rate, self._language).strip()
+        raw = self._recognize_fn(pcm16.tobytes(), sample_rate, self._language)
+        if isinstance(raw, str):
+            cleaned = raw.strip()
+            return [cleaned] if cleaned else []
+        return [item.strip() for item in raw if isinstance(item, str) and item.strip()]
 
 
 def _default_model_factory(
@@ -240,9 +279,29 @@ class SwitchableTranscriber:
 
     def transcribe(self, audio: np.ndarray, sample_rate: int = DEFAULT_SAMPLE_RATE) -> str:
         active_engine = self.engine
+        if active_engine is SttEngine.CHROME:
+            return ""
         if active_engine is SttEngine.WEB:
             return self._web.transcribe(audio, sample_rate=sample_rate)
         return self._whisper.transcribe(audio, sample_rate=sample_rate)
+
+    def transcribe_candidates(
+        self,
+        audio: np.ndarray,
+        sample_rate: int = DEFAULT_SAMPLE_RATE,
+    ) -> list[str]:
+        """Palauttaa kaikki puheentunnistimen ehdokkaat (Google `show_all=True` tai Whisper)."""
+        active_engine = self.engine
+        if active_engine is SttEngine.CHROME:
+            return []
+        if active_engine is SttEngine.WEB:
+            cand_fn = getattr(self._web, "transcribe_candidates", None)
+            if callable(cand_fn):
+                return list(cand_fn(audio, sample_rate=sample_rate))
+            text = self._web.transcribe(audio, sample_rate=sample_rate).strip()
+            return [text] if text else []
+        text = self._whisper.transcribe(audio, sample_rate=sample_rate).strip()
+        return [text] if text else []
 
 
 def _collect_segments_text(segments: Iterable[Any]) -> str:

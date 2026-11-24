@@ -1,3 +1,5 @@
+from pathlib import Path
+import tempfile
 import unittest
 
 from puhis.core.actions import WindowInfo
@@ -62,6 +64,32 @@ class WindowRegistryTests(unittest.TestCase):
         self.assertFalse(is_default_window_slot("t"))
         self.assertFalse(is_default_window_slot("t100"))
         self.assertFalse(is_default_window_slot("laskin"))
+
+    def test_persists_and_reloads_windows_atomically(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "windows.json"
+            reg1 = WindowRegistry(storage_path=path)
+            reg1.save("depo", WindowInfo(hwnd=67390, title="DEPO 3.0", process_name="chrome.exe"))
+            reg1.save("t1", WindowInfo(hwnd=1234, title="Muistio", process_name="notepad.exe"))
+
+            reg2 = WindowRegistry(storage_path=path)
+            self.assertEqual([e.alias for e in reg2.list_entries()], ["depo", "t1"])
+            depo = reg2.get("depo")
+            self.assertIsNotNone(depo)
+            assert depo is not None
+            self.assertEqual(depo.window.hwnd, 67390)
+            self.assertEqual(depo.window.process_name, "chrome.exe")
+
+            reg2.remove("t1")
+            reg3 = WindowRegistry(storage_path=path)
+            self.assertEqual([e.alias for e in reg3.list_entries()], ["depo"])
+
+    def test_corrupt_windows_file_does_not_crash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "windows.json"
+            path.write_text("{rikkinäinen json", encoding="utf-8")
+            reg = WindowRegistry(storage_path=path)
+            self.assertEqual(reg.list_entries(), [])
 
 
 if __name__ == "__main__":

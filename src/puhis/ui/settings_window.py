@@ -22,6 +22,7 @@ from puhis.core.config_validator import (
 from puhis.core.event_log import EventLog, LogEvent
 from puhis.core.window_registry import WindowRegistry
 from puhis.ui.tabs.apps_tab import AppsTab
+from puhis.ui.tabs.commands_tab import CommandsTab
 from puhis.ui.tabs.general_tab import GeneralTab
 from puhis.ui.tabs.keywords_tab import KeywordsTab
 from puhis.ui.tabs.windows_log_tab import WindowsLogTab
@@ -56,6 +57,7 @@ class SettingsWindow(QWidget):
         self.nav_list.setFixedWidth(210)
         self.nav_list.addItems([
             "⚙️  Yleiset & Tunnistin",
+            "🗣️  Puhekomennot",
             "⌨️  Omat avainsanat & näppäimet",
             "🚀  Sallitut sovellukset",
             "🪟  Ikkunat & Tapahtumaloki",
@@ -63,12 +65,14 @@ class SettingsWindow(QWidget):
 
         self.stack = QStackedWidget(self)
         self.general_tab = GeneralTab(self)
+        self.commands_tab = CommandsTab(self)
         self.keywords_tab = KeywordsTab(self)
         self.apps_tab = AppsTab(self)
         self.windows_log_tab = WindowsLogTab(window_registry, event_log, self)
         self.windows_log_tab.focus_window_requested.connect(self.focus_window_requested.emit)
 
         self.stack.addWidget(self.general_tab)
+        self.stack.addWidget(self.commands_tab)
         self.stack.addWidget(self.keywords_tab)
         self.stack.addWidget(self.apps_tab)
         self.stack.addWidget(self.windows_log_tab)
@@ -100,6 +104,7 @@ class SettingsWindow(QWidget):
         """Lataa asetukset kaikkiin välilehtiin."""
         self._config = AppConfig.from_dict(config.to_dict())
         self.general_tab.load_from_config(self._config)
+        self.commands_tab.set_wake_word(self._config.wake_word)
         self.keywords_tab.load_keywords(self._config.keywords)
         self.apps_tab.load_app_aliases(self._config.app_aliases)
         self.windows_log_tab.refresh_windows()
@@ -112,7 +117,7 @@ class SettingsWindow(QWidget):
 
     def _on_tab_changed(self, index: int) -> None:
         self.stack.setCurrentIndex(index)
-        if index == 3:
+        if self.stack.currentWidget() is self.windows_log_tab:
             self.windows_log_tab.refresh_windows()
 
     def _on_save_clicked(self) -> None:
@@ -141,5 +146,6 @@ class SettingsWindow(QWidget):
         updated.keywords = keywords
         updated.app_aliases = app_aliases
         self._config = updated
+        self.commands_tab.set_wake_word(updated.wake_word)
         self.status_label.setText("✓ Asetukset tallennettu ja otettu käyttöön.")
         self.config_saved.emit(updated)

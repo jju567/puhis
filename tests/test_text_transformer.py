@@ -80,6 +80,35 @@ class TextTransformerTests(unittest.TestCase):
             ],
         )
 
+    def test_transform_poista_sana_emits_ctrl_backspace(self) -> None:
+        actions = transform_dictation("kissa poista sana koira", DEFAULT_KEYWORDS)
+
+        self.assertEqual(
+            actions,
+            [
+                TextAction(text="kissa"),
+                KeyAction(key=VirtualKey.CTRL_BACKSPACE),
+                TextAction(text="koira"),
+            ],
+        )
+        self.assertEqual(
+            transform_dictation("pyyhi sana", DEFAULT_KEYWORDS),
+            [KeyAction(key=VirtualKey.CTRL_BACKSPACE)],
+        )
+
+    def test_transform_poista_delete_pyyhi_kaikki_and_pisteet(self) -> None:
+        actions = transform_dictation("hei pisteet poista delete pyyhi kaikki", DEFAULT_KEYWORDS)
+
+        self.assertEqual(
+            actions,
+            [
+                TextAction(text="hei."),
+                KeyAction(key=VirtualKey.BACKSPACE),
+                KeyAction(key=VirtualKey.DELETE),
+                KeyAction(key=VirtualKey.CLEAR_ALL),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

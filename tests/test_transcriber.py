@@ -11,6 +11,7 @@ from puhis.stt.transcriber import (
     FasterWhisperTranscriber,
     GoogleWebSpeechTranscriber,
     SwitchableTranscriber,
+    _extract_google_alternatives,
     build_initial_prompt,
 )
 
@@ -130,6 +131,19 @@ class TranscriberTests(unittest.TestCase):
         self.assertIs(switcher.engine, SttEngine.WHISPER)
         self.assertEqual(switcher.transcribe(audio), "whisper tulos")
         self.assertTrue(whisper.is_loaded)
+
+    def test_extract_google_alternatives_returns_unique_transcripts(self) -> None:
+        raw = {
+            "alternative": [
+                {"transcript": "Puhis save Teboil", "confidence": 0.8},
+                {"transcript": "Puhis save Depo"},
+                {"transcript": "Puhis save Teboil"},
+            ]
+        }
+        self.assertEqual(
+            _extract_google_alternatives(raw),
+            ["Puhis save Teboil", "Puhis save Depo"],
+        )
 
 
 if __name__ == "__main__":

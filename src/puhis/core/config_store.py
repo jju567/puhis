@@ -27,6 +27,7 @@ class SttEngine(StrEnum):
 
     WEB = "web"
     WHISPER = "whisper"
+    CHROME = "chrome"
 
 
 CONFIG_VERSION = 1
@@ -39,7 +40,9 @@ DEFAULT_WAKE_WORD = "puhis"
 # Erikoisnäppäimet merkitään aaltosulkeilla, jotta ne erottuvat tavallisista merkeistä.
 DEFAULT_KEYWORDS: dict[str, str] = {
     "piste": ".",
+    "pisteet": ".",
     "pilkku": ",",
+    "pilkut": ",",
     "kysymysmerkki": "?",
     "huutomerkki": "!",
     "kaksoispiste": ":",
@@ -54,6 +57,14 @@ DEFAULT_KEYWORDS: dict[str, str] = {
     "tab": "{TAB}",
     "välilyönti": "{SPACE}",
     "pyyhi": "{BACKSPACE}",
+    "pyyhin": "{BACKSPACE}",
+    "poista": "{BACKSPACE}",
+    "delete": "{DELETE}",
+    "poista sana": "{CTRL_BACKSPACE}",
+    "pyyhi sana": "{CTRL_BACKSPACE}",
+    "pyyhi sanoa": "{CTRL_BACKSPACE}",
+    "pyyhi sanaa": "{CTRL_BACKSPACE}",
+    "pyyhi kaikki": "{CLEAR_ALL}",
     "esc": "{ESCAPE}",
 }
 
@@ -61,6 +72,12 @@ DEFAULT_APP_ALIASES: dict[str, list[str]] = {
     "laskin": ["calc.exe"],
     "muistio": ["notepad.exe"],
 }
+DEFAULT_OPENROUTER_MODELS: tuple[str, ...] = (
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3.5-lightning:free",
+    "inclusionai/ling-3.2-flash:free",
+)
 
 # Virhetila on ajonaikainen, eikä sovellusta saa käynnistää siihen.
 _ALLOWED_START_MODES = frozenset({AssistantMode.IDLE, AssistantMode.DICTATING, AssistantMode.MUTED})
@@ -81,6 +98,12 @@ class AppConfig:
     app_aliases: dict[str, list[str]] = field(
         default_factory=lambda: {name: list(cmd) for name, cmd in DEFAULT_APP_ALIASES.items()}
     )
+    llm_enabled: bool = False
+    openrouter_api_key: str = ""
+    openrouter_model: str = DEFAULT_OPENROUTER_MODELS[0]
+    openrouter_fallback_models: list[str] = field(
+        default_factory=lambda: list(DEFAULT_OPENROUTER_MODELS[1:])
+    )
 
     def to_dict(self) -> dict[str, Any]:
         """Muuntaa asetukset JSON-yhteensopivaksi sanakirjaksi."""
@@ -95,6 +118,10 @@ class AppConfig:
             "cat_y": self.cat_y,
             "keywords": dict(self.keywords),
             "app_aliases": {name: list(cmd) for name, cmd in self.app_aliases.items()},
+            "llm_enabled": self.llm_enabled,
+            "openrouter_api_key": self.openrouter_api_key,
+            "openrouter_model": self.openrouter_model,
+            "openrouter_fallback_models": list(self.openrouter_fallback_models),
         }
 
     @classmethod
@@ -111,6 +138,14 @@ class AppConfig:
             cat_y=_parse_optional_int(data.get("cat_y")),
             keywords=_parse_keywords(data.get("keywords"), defaults.keywords),
             app_aliases=_parse_app_aliases(data.get("app_aliases"), defaults.app_aliases),
+            llm_enabled=_parse_bool(data.get("llm_enabled"), defaults.llm_enabled),
+            openrouter_api_key=_parse_str(data.get("openrouter_api_key"), defaults.openrouter_api_key),
+            openrouter_model=_parse_non_empty_str(
+                data.get("openrouter_model"), defaults.openrouter_model
+            ),
+            openrouter_fallback_models=_parse_model_list(
+                data.get("openrouter_fallback_models"), defaults.openrouter_fallback_models
+            ),
         )
 
 
@@ -180,6 +215,40 @@ def _parse_app_aliases(value: Any, default: dict[str, list[str]]) -> dict[str, l
             continue
         result[name.strip().lower()] = list(command)
     return result
+
+
+def _parse_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    return default
+
+
+def _parse_str(value: Any, default: str) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    return default
+
+
+def _parse_non_empty_str(value: Any, default: str) -> str:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return default
+
+
+_RETIRED_OPENROUTER_MODELS = frozenset({"qwen/qwen-2.5-72b-instruct:free"})
+
+
+def _parse_model_list(value: Any, default: list[str]) -> list[str]:
+    if not isinstance(value, list):
+        return list(default)
+    models = [
+        item.strip()
+        for item in value
+        if isinstance(item, str)
+        and item.strip()
+        and item.strip() not in _RETIRED_OPENROUTER_MODELS
+    ]
+    return models if models else list(default)
 
 
 class ConfigStore:

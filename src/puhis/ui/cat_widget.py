@@ -12,7 +12,7 @@ from puhis.core.app_state import AssistantMode
 from puhis.core.config_store import CatTheme
 from puhis.core.eye_math import pupil_offset
 from puhis.platform.win32_window import apply_floating_tool_style
-from puhis.ui.cat_painter import CatGeometry, Offset, paint_cat
+from puhis.ui.cat_painter import CatGeometry, Offset, cat_widget_height, paint_cat
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,12 @@ class CatWidget(QWidget):
     position_committed = Signal(QPoint)
     geometry_changed = Signal(QRect)
 
-    def __init__(self, size: int, theme: CatTheme = CatTheme.CHARCOAL) -> None:
+    def __init__(
+        self,
+        size: int,
+        theme: CatTheme = CatTheme.CHARCOAL,
+        wake_word: str = "",
+    ) -> None:
         flags = (
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -45,7 +50,8 @@ class CatWidget(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.setFixedSize(size, size)
+        self._wake_word = wake_word.strip()
+        self.setFixedSize(size, cat_widget_height(size, show_wake_word=bool(self._wake_word)))
         self.setToolTip("Puhis")
 
         self._geometry = CatGeometry(float(size))
@@ -86,10 +92,22 @@ class CatWidget(QWidget):
 
     def set_cat_size(self, size: int) -> None:
         """Muuttaa kissan koon lennossa."""
-        if size == self.width():
+        target_h = cat_widget_height(size, show_wake_word=bool(self._wake_word))
+        if size == self.width() and target_h == self.height():
             return
         self._geometry = CatGeometry(float(size))
-        self.setFixedSize(size, size)
+        self.setFixedSize(size, target_h)
+        self.update()
+        self.geometry_changed.emit(self.geometry())
+
+    def set_wake_word(self, wake_word: str) -> None:
+        """Päivittää kissan alla näytettävän aktiivisen herätesanan."""
+        cleaned = wake_word.strip()
+        if cleaned == self._wake_word:
+            return
+        self._wake_word = cleaned
+        size = int(round(self._geometry.size))
+        self.setFixedSize(size, cat_widget_height(size, show_wake_word=bool(self._wake_word)))
         self.update()
         self.geometry_changed.emit(self.geometry())
 
@@ -150,6 +168,7 @@ class CatWidget(QWidget):
                 processing=self._processing,
                 spinner_angle_deg=self._spinner_angle,
                 sleeping=self._sleeping,
+                wake_word=self._wake_word,
             )
         finally:
             painter.end()

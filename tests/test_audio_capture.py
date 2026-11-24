@@ -5,7 +5,7 @@ import unittest
 
 import numpy as np
 
-from puhis.stt.audio_capture import AudioListener
+from puhis.stt.audio_capture import AudioListener, resample_audio
 from puhis.stt.vad import VadConfig
 
 
@@ -131,6 +131,13 @@ class AudioCaptureTests(unittest.TestCase):
             self.assertIn("Mikrofonia ei löytynyt", errors[0])
         finally:
             listener.stop()
+
+    def test_resample_audio_downsamples_48k_to_16k_length(self) -> None:
+        src = np.linspace(-0.5, 0.5, 1440, dtype=np.float32)  # 30 ms @ 48 kHz
+        dst = resample_audio(src, 48_000, 16_000)
+
+        self.assertEqual(dst.dtype, np.float32)
+        self.assertEqual(dst.size, 480)  # 30 ms @ 16 kHz
 
 
 if __name__ == "__main__":

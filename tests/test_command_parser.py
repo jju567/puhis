@@ -176,6 +176,24 @@ class CommandParserTests(unittest.TestCase):
         self.assertIs(fuzzy_inflected.command_type, CommandType.LAUNCH_APP)
         self.assertEqual(fuzzy_inflected.target, "laskin")
 
+        who_is = parse_command("Who is aktivoi koodi")
+        self.assertIsNotNone(who_is)
+        assert who_is is not None
+        self.assertIs(who_is.command_type, CommandType.FOCUS_WINDOW)
+        self.assertEqual(who_is.target, "koodi")
+
+        fuzzy_win = parse_command("puhis aktivoi koodaus", known_window_aliases={"koodi"})
+        self.assertIsNotNone(fuzzy_win)
+        assert fuzzy_win is not None
+        self.assertIs(fuzzy_win.command_type, CommandType.FOCUS_WINDOW)
+        self.assertEqual(fuzzy_win.target, "koodi")
+
+        puhdistava = parse_command("puhdistava muistio", known_app_aliases={"muistio", "laskin"})
+        self.assertIsNotNone(puhdistava)
+        assert puhdistava is not None
+        self.assertIs(puhdistava.command_type, CommandType.LAUNCH_APP)
+        self.assertEqual(puhdistava.target, "muistio")
+
     def test_parse_command_without_wake_word_when_already_awake(self) -> None:
         cmd = parse_command(
             "kamaa laskin",
@@ -186,6 +204,90 @@ class CommandParserTests(unittest.TestCase):
         assert cmd is not None
         self.assertIs(cmd.command_type, CommandType.LAUNCH_APP)
         self.assertEqual(cmd.target, "laskin")
+
+    def test_avaa_focuses_window_when_target_is_slot_or_saved_window(self) -> None:
+        slot_cmd = parse_command("puhis avaa t1", known_app_aliases={"muistio", "laskin"})
+        saved_cmd = parse_command(
+            "puhis avaa omaikkuna",
+            known_window_aliases={"omaikkuna"},
+            known_app_aliases={"muistio", "laskin"},
+        )
+        app_cmd = parse_command(
+            "puhis avaa muistio",
+            known_window_aliases={"muistio"},
+            known_app_aliases={"muistio", "laskin"},
+        )
+
+        self.assertIsNotNone(slot_cmd)
+        assert slot_cmd is not None
+        self.assertIs(slot_cmd.command_type, CommandType.FOCUS_WINDOW)
+        self.assertEqual(slot_cmd.target, "t1")
+
+        self.assertIsNotNone(saved_cmd)
+        assert saved_cmd is not None
+        self.assertIs(saved_cmd.command_type, CommandType.FOCUS_WINDOW)
+        self.assertEqual(saved_cmd.target, "omaikkuna")
+
+        self.assertIsNotNone(app_cmd)
+        assert app_cmd is not None
+        self.assertIs(app_cmd.command_type, CommandType.LAUNCH_APP)
+        self.assertEqual(app_cmd.target, "muistio")
+
+    def test_wake_word_recognized_after_leading_speech(self) -> None:
+        wake_only = parse_command("no niin katsotaanpa mitä tapahtuu puhis")
+        self.assertIsNotNone(wake_only)
+        assert wake_only is not None
+        self.assertIs(wake_only.command_type, CommandType.WAKE)
+
+        with_cmd = parse_command(
+            "no niin katsotaanpa puhis avaa laskin",
+            known_app_aliases={"laskin"},
+        )
+        self.assertIsNotNone(with_cmd)
+        assert with_cmd is not None
+        self.assertIs(with_cmd.command_type, CommandType.LAUNCH_APP)
+        self.assertEqual(with_cmd.target, "laskin")
+
+        clipped = parse_command(
+            "is Avaa laskin",
+            known_app_aliases={"laskin"},
+        )
+        self.assertIsNotNone(clipped)
+        assert clipped is not None
+        self.assertIs(clipped.command_type, CommandType.LAUNCH_APP)
+        self.assertEqual(clipped.target, "laskin")
+
+        pois_misheard = parse_command(
+            "pois avaat muistio",
+            known_app_aliases={"muistio"},
+        )
+        self.assertIsNotNone(pois_misheard)
+        assert pois_misheard is not None
+        self.assertIs(pois_misheard.command_type, CommandType.LAUNCH_APP)
+        self.assertEqual(pois_misheard.target, "muistio")
+
+    def test_glued_wake_word_and_colloquial_verbs(self) -> None:
+        sanelu = parse_command("puhissanelle")
+        self.assertIsNotNone(sanelu)
+        assert sanelu is not None
+        self.assertIs(sanelu.command_type, CommandType.START_DICTATION)
+
+        talleta = parse_command("puhistalleta depo")
+        self.assertIsNotNone(talleta)
+        assert talleta is not None
+        self.assertIs(talleta.command_type, CommandType.SAVE_WINDOW)
+        self.assertEqual(talleta.target, "depo")
+
+        aukaise = parse_command("Okei Puhis aukaisepa selain", known_app_aliases={"selain"})
+        self.assertIsNotNone(aukaise)
+        assert aukaise is not None
+        self.assertIs(aukaise.command_type, CommandType.LAUNCH_APP)
+        self.assertEqual(aukaise.target, "selain")
+
+        luis_wake = parse_command("Luis herää")
+        self.assertIsNotNone(luis_wake)
+        assert luis_wake is not None
+        self.assertIs(luis_wake.command_type, CommandType.WAKE)
 
 
 if __name__ == "__main__":

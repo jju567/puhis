@@ -3,6 +3,7 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPainter, QPaintEvent
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QGroupBox,
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
 from puhis.core.app_state import AssistantMode
 from puhis.core.config_store import (
     DEFAULT_CAT_SIZE,
+    DEFAULT_OPENROUTER_MODELS,
     MAX_CAT_SIZE,
     MIN_CAT_SIZE,
     AppConfig,
@@ -114,6 +116,29 @@ class GeneralTab(QWidget):
 
         root.addWidget(cat_group)
 
+        llm_group = QGroupBox("Älykäs komentotulkinta (OpenRouter)", self)
+        llm_form = QFormLayout(llm_group)
+        llm_form.setSpacing(10)
+
+        self.llm_enabled_check = QCheckBox(
+            "Käytä OpenRouter-tulkitsijaa epäselville komennoille",
+            self,
+        )
+        llm_form.addRow(self.llm_enabled_check)
+
+        self.openrouter_key_edit = QLineEdit(self)
+        self.openrouter_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.openrouter_key_edit.setPlaceholderText("sk-or-v1-... (tai OPENROUTER_API_KEY)")
+        llm_form.addRow("OpenRouter API -avain:", self.openrouter_key_edit)
+
+        self.openrouter_model_combo = QComboBox(self)
+        self.openrouter_model_combo.setEditable(True)
+        for model_name in DEFAULT_OPENROUTER_MODELS:
+            self.openrouter_model_combo.addItem(model_name)
+        llm_form.addRow("Ensisijainen malli:", self.openrouter_model_combo)
+
+        root.addWidget(llm_group)
+
         hint = QLabel(
             "Vinkki: Kun sanot 'puhis avaa <sovellus>', sovellus käynnistyy ja "
             "sanelutila kytkeytyy automaattisesti päälle, jotta voit heti puhua ohjelmaan.",
@@ -131,6 +156,9 @@ class GeneralTab(QWidget):
         self._select_combo_data(self.theme_combo, config.cat_theme)
         self.size_spin.setValue(config.cat_size)
         self._preview.set_theme(config.cat_theme)
+        self.llm_enabled_check.setChecked(config.llm_enabled)
+        self.openrouter_key_edit.setText(config.openrouter_api_key)
+        self.openrouter_model_combo.setCurrentText(config.openrouter_model)
 
     def apply_to_config(self, config: AppConfig) -> None:
         """Kirjoittaa kenttien arvot `AppConfig`-olioon."""
@@ -145,6 +173,11 @@ class GeneralTab(QWidget):
         if isinstance(theme, CatTheme):
             config.cat_theme = theme
         config.cat_size = int(self.size_spin.value() or DEFAULT_CAT_SIZE)
+        config.llm_enabled = self.llm_enabled_check.isChecked()
+        config.openrouter_api_key = self.openrouter_key_edit.text().strip()
+        model_text = self.openrouter_model_combo.currentText().strip()
+        if model_text:
+            config.openrouter_model = model_text
 
     def _on_theme_changed(self) -> None:
         theme = self.theme_combo.currentData()

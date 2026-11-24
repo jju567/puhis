@@ -1,6 +1,8 @@
 """Sovelluksen kokoava ohjain: asetukset, kissa, puhekupla, valikko, Tray ja STT."""
 
+from collections.abc import Sequence
 import logging
+import webbrowser
 
 from PySide6.QtCore import QObject, QPoint, QRect, QTimer, Signal
 from PySide6.QtGui import QGuiApplication
@@ -14,8 +16,16 @@ from puhis.core.utterance_router import UtteranceRouter
 from puhis.core.window_registry import WindowRegistry
 from puhis.platform.app_launcher import AppLauncher
 from puhis.platform.keyboard_injector import KeyboardInjector
+from puhis.platform.openrouter_client import OpenRouterIntentClient
+from puhis.platform.paths import get_windows_path
 from puhis.platform.window_manager import WindowManager
 from puhis.stt.audio_capture import AudioListener
+from puhis.stt.browser_bridge import (
+    BRIDGE_WINDOW_TITLE,
+    DEFAULT_BRIDGE_PORT,
+    BrowserSpeechBridge,
+    launch_chrome_app,
+)
 from puhis.stt.transcriber import SwitchableTranscriber, build_initial_prompt
 from puhis.ui.app_menu import AppMenu, ENGINE_LABELS_FI
 from puhis.ui.cat_widget import CatWidget
@@ -35,6 +45,8 @@ class AppController(QObject):
     """Kytkee käyttöliittymän, taustakuuntelun ja komentoreitittimen toisiinsa."""
 
     utterance_received = Signal(str)
+    candidates_received = Signal(list)
+    bridge_status_received = Signal(str)
     listener_error = Signal(str)
     processing_changed = Signal(bool)
     listener_ready = Signal()
@@ -53,15 +65,22 @@ class AppController(QObject):
         self._config: AppConfig = store.load()
         self._mode = self._config.start_mode
 
-        self._window_registry = WindowRegistry()
+        self._window_registry = WindowRegistry(storage_path=get_windows_path())
         self._event_log = EventLog()
         self._app_launcher = AppLauncher(self._config.app_aliases)
+        self._window_manager = WindowManager()
+        self._intent_client = OpenRouterIntentClient(
+            api_key=self._config.openrouter_api_key,
+            primary_model=self._config.openrouter_model,
+            fallback_models=self._config.openrouter_fallback_models,
+        )
         self._router = router or UtteranceRouter(
             config=self._config,
             window_registry=self._window_registry,
             keyboard_injector=KeyboardInjector(),
-            window_manager=WindowManager(),
+            window_manager=self._window_manager,
             app_launcher=self._app_launcher,
+            intent_interpreter=self._intent_client,
         )
 
         self._transcriber: SwitchableTranscriber | None = None
@@ -76,12 +95,21 @@ class AppController(QObject):
             self._listener = AudioListener(
                 transcriber=self._transcriber,
                 on_utterance=self.utterance_received.emit,
+                on_candidates=self.candidates_received.emit,
                 on_error=self.listener_error.emit,
                 on_processing=self.processing_changed.emit,
                 on_ready=self.listener_ready.emit,
             )
 
-        self._cat = CatWidget(self._config.cat_size, theme=self._config.cat_theme)
+        self._browser_bridge: BrowserSpeechBridge | None = None
+        self._bridge_minimized = False
+        self._bridge_minimize_attempts = 0
+
+        self._cat = CatWidget(
+            self._config.cat_size,
+            theme=self._config.cat_theme,
+            wake_word=self._config.wake_word,
+        )
         self._bubble = SpeechBubble()
         self._menu = AppMenu()
         self._tray = PuhisTrayIcon(self._menu, self, theme=self._config.cat_theme)
@@ -103,7 +131,11 @@ class AppController(QObject):
         else:
             logger.warning("Windowsin ilmaisinalue ei ole käytettävissä")
         self._apply_mode(self._mode)
-        if self._listener is not None:
+        if self._config.stt_engine is SttEngine.CHROME:
+            self._cat.set_sleeping(True)
+            self._cat.setToolTip("Puhis – Käynnistetään Chrome-kuuntelua…")
+            self._start_chrome_bridge()
+        elif self._listener is not None:
             # Kissa nukkuu, kunnes mikrofoni ja puheentunnistin ovat valmiina.
             self._cat.set_sleeping(True)
             self._cat.setToolTip("Puhis – Käynnistetään mikrofonia…")
@@ -112,15 +144,19 @@ class AppController(QObject):
 
     def handle_utterance(self, text: str) -> UtteranceResult:
         """Käsittelee tunnistetun puhejakson pääsäikeessä."""
+        return self.handle_candidates([text])
+
+    def handle_candidates(self, candidates: Sequence[str]) -> UtteranceResult:
+        """Valitsee parhaan tunnistusehdokkaan ja päivittää kissan sekä puhekuplan."""
         self._cat.set_processing(False)
-        result = self._router.handle_utterance(text, self._mode)
-        engine_tag = "🌐" if self._config.stt_engine is SttEngine.WEB else "💻"
-        heard_line = f'{engine_tag} "{text.strip()}"'
+        chosen_text, result = self._router.handle_candidates(candidates, self._mode)
+        engine_tag = "🌐" if self._config.stt_engine in (SttEngine.WEB, SttEngine.CHROME) else "💻"
+        heard_line = f'{engine_tag} "{chosen_text}"'
 
         if not result.handled:
             return result
 
-        self._record_event(text, result.message or "OK", success=result.success)
+        self._record_event(chosen_text, result.message or "OK", success=result.success)
 
         if result.message:
             self._cat.setToolTip(f"Puhis – {result.message}")
@@ -207,6 +243,8 @@ class AppController(QObject):
         self._app.aboutToQuit.connect(self._on_about_to_quit)
 
         self.utterance_received.connect(self._on_utterance_signal)
+        self.candidates_received.connect(self._on_candidates_signal)
+        self.bridge_status_received.connect(self._on_bridge_status)
         self.listener_error.connect(self._on_listener_error)
         self.processing_changed.connect(self._on_processing_changed)
         self.listener_ready.connect(self._on_listener_ready)
@@ -215,6 +253,9 @@ class AppController(QObject):
 
     def _on_utterance_signal(self, text: str) -> None:
         self.handle_utterance(text)
+
+    def _on_candidates_signal(self, candidates: list[str]) -> None:
+        self.handle_candidates(candidates)
 
     def _on_processing_changed(self, is_processing: bool) -> None:
         self._cat.set_processing(is_processing)
@@ -274,15 +315,22 @@ class AppController(QObject):
         self._save_config()
 
     def _on_engine_selected(self, engine: SttEngine) -> None:
-        if engine is self._config.stt_engine:
-            return
+        was_same = engine is self._config.stt_engine
         self._config.stt_engine = engine
         if self._transcriber is not None:
             self._transcriber.set_engine(engine)
+        if engine is SttEngine.CHROME:
+            self._start_chrome_bridge()
+        else:
+            self._stop_chrome_bridge()
+            if self._listener is not None and not self._listener.is_running:
+                self._listener.start()
         self._refresh_menu()
-        self._save_config()
-        label = ENGINE_LABELS_FI.get(engine, engine.value)
-        self._show_bubble("Puheentunnistin vaihdettu", label, BubbleTone.COMMAND, duration_ms=3200)
+        if not was_same:
+            self._save_config()
+            if engine is not SttEngine.CHROME:
+                label = ENGINE_LABELS_FI.get(engine, engine.value)
+                self._show_bubble("Puheentunnistin vaihdettu", label, BubbleTone.COMMAND, duration_ms=3200)
 
     def _on_toggle_visibility(self) -> None:
         visible = not self._cat.isVisible()
@@ -320,15 +368,29 @@ class AppController(QObject):
         self._settings_window.activateWindow()
 
     def _on_config_saved(self, new_config: AppConfig) -> None:
+        prev_engine = self._config.stt_engine
         new_config.cat_x = self._config.cat_x
         new_config.cat_y = self._config.cat_y
         self._config = new_config
+        self._intent_client.update_settings(
+            api_key=self._config.openrouter_api_key,
+            primary_model=self._config.openrouter_model,
+            fallback_models=self._config.openrouter_fallback_models,
+        )
         self._router.update_config(self._config)
         self._app_launcher.update_aliases(self._config.app_aliases)
         if self._transcriber is not None:
             self._transcriber.set_engine(self._config.stt_engine)
+        if self._config.stt_engine is not prev_engine:
+            if self._config.stt_engine is SttEngine.CHROME:
+                self._start_chrome_bridge()
+            else:
+                self._stop_chrome_bridge()
+                if self._listener is not None and not self._listener.is_running:
+                    self._listener.start()
         self._cat.set_theme(self._config.cat_theme)
         self._cat.set_cat_size(self._config.cat_size)
+        self._cat.set_wake_word(self._config.wake_word)
         self._tray.set_theme(self._config.cat_theme)
         self._refresh_menu()
         self._save_config()
@@ -342,12 +404,76 @@ class AppController(QObject):
     def _on_focus_window_from_ui(self, alias: str) -> None:
         self.handle_utterance(f"{self._config.wake_word} fokus {alias}")
 
+    def _start_chrome_bridge(self) -> None:
+        if self._browser_bridge is None:
+            self._browser_bridge = BrowserSpeechBridge(
+                on_candidates=self.candidates_received.emit,
+                on_status=self.bridge_status_received.emit,
+                port=DEFAULT_BRIDGE_PORT,
+            )
+        self._bridge_minimized = False
+        url = self._browser_bridge.start()
+        # Vapautetaan sisäinen mikrofonivirta kokonaan, jotta Chrome saa yksin
+        # käyttää mikrofonia ilman WASAPI/Web Speech -konfliktia.
+        if self._listener is not None and self._listener.is_running:
+            self._listener.stop()
+        self._window_manager.close_matching_window("Chrome-puhekuuntelu")
+        launch_chrome_app(url)
+        self._show_bubble(
+            "🌐 Chrome-kuuntelu käynnistyy",
+            "Kuuntelu alkaa automaattisesti…",
+            BubbleTone.COMMAND,
+            duration_ms=3200,
+        )
+
+    def _stop_chrome_bridge(self) -> None:
+        self._window_manager.close_matching_window("Chrome-puhekuuntelu")
+        if self._browser_bridge is not None:
+            self._browser_bridge.stop()
+
+    def _on_bridge_status(self, state: str) -> None:
+        logger.info("Chrome-kuuntelun tila: %s", state)
+        if state == "listening":
+            self._cat.set_sleeping(False)
+            self._cat.setToolTip("Puhis")
+            if not self._bridge_minimized:
+                self._bridge_minimize_attempts = 0
+                self._try_minimize_bridge_window()
+                self._show_bubble(
+                    "🌐 Chrome-kuuntelu päällä",
+                    "Taustakuuntelu aktiivinen",
+                    BubbleTone.COMMAND,
+                    duration_ms=2600,
+                )
+        elif state.startswith("error:"):
+            err = state.split(":", 1)[1]
+            if err not in ("no-speech", "aborted"):
+                self._show_bubble(
+                    "🌐 Chrome-kuuntelu",
+                    f"Salli mikrofoni selaimessa ({err})",
+                    BubbleTone.ERROR,
+                    duration_ms=4200,
+                )
+
+    def _try_minimize_bridge_window(self) -> None:
+        if self._bridge_minimized:
+            return
+        if self._window_manager.minimize_matching_window("Chrome-puhekuuntelu"):
+            self._bridge_minimized = True
+            return
+        self._bridge_minimize_attempts += 1
+        if self._bridge_minimize_attempts < 6:
+            QTimer.singleShot(500, self._try_minimize_bridge_window)
+
     def quit(self) -> None:
         """Sulkee taustakuuntelun ja sovelluksen hallitusti."""
         logger.info("puhis suljetaan")
         self._flash_timer.stop()
         if self._listener is not None:
             self._listener.stop()
+        if self._browser_bridge is not None:
+            self._window_manager.close_matching_window("Chrome-puhekuuntelu")
+            self._browser_bridge.stop()
         if self._settings_window is not None:
             self._settings_window.close()
         self._tray.hide()
@@ -424,6 +550,9 @@ class AppController(QObject):
     def _on_about_to_quit(self) -> None:
         if self._listener is not None:
             self._listener.stop()
+        if self._browser_bridge is not None:
+            self._window_manager.close_matching_window("Chrome-puhekuuntelu")
+            self._browser_bridge.stop()
         self._persist_position()
 
     def _persist_position(self) -> None:

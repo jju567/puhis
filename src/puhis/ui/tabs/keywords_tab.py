@@ -22,6 +22,8 @@ _PRESET_KEY_TOKENS: list[tuple[str, str]] = [
     ("{ENTER}", "{ENTER} – Enter / rivinvaihto"),
     ("{TAB}", "{TAB} – Sarkain (Tab)"),
     ("{BACKSPACE}", "{BACKSPACE} – Pyyhi (Backspace)"),
+    ("{CTRL_BACKSPACE}", "{CTRL_BACKSPACE} – Poista edellinen sana (Ctrl+Backspace)"),
+    ("{CLEAR_ALL}", "{CLEAR_ALL} – Pyyhi kaikki (Ctrl+A + Backspace)"),
     ("{SPACE}", "{SPACE} – Välilyönti"),
     ("{ESCAPE}", "{ESCAPE} – Esc"),
     ("{DELETE}", "{DELETE} – Delete"),

@@ -19,9 +19,9 @@ class VadConfig:
     sample_rate: int = DEFAULT_SAMPLE_RATE
     frame_duration_ms: int = 30
     rms_threshold: float = 0.0035
-    pre_roll_ms: int = 300
+    pre_roll_ms: int = 450
     min_speech_ms: int = 240
-    silence_duration_ms: int = 450
+    silence_duration_ms: int = 700
     max_utterance_ms: int = 8_000
 
     @property

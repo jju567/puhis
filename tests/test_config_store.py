@@ -11,6 +11,7 @@ from puhis.core.config_store import (
     AppConfig,
     CatTheme,
     ConfigStore,
+    SttEngine,
 )
 
 
@@ -34,6 +35,7 @@ class ConfigStoreTests(unittest.TestCase):
     def test_save_and_load_roundtrip_preserves_values(self) -> None:
         config = AppConfig(
             wake_word="kissa",
+            stt_engine=SttEngine.CHROME,
             cat_theme=CatTheme.CREAM,
             cat_size=120,
             cat_x=10,

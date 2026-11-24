@@ -22,10 +22,47 @@ WORKER_POLL_TIMEOUT_S = 0.1
 STOP_JOIN_TIMEOUT_S = 2.0
 
 type UtteranceCallback = Callable[[str], None]
+type CandidatesCallback = Callable[[list[str]], None]
 type ErrorCallback = Callable[[str], None]
 type ProcessingCallback = Callable[[bool], None]
 type ReadyCallback = Callable[[], None]
 type StreamFactory = Callable[[int, int, Callable[[np.ndarray], None]], AbstractContextManager[Any]]
+
+
+def resample_audio(samples: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarray:
+    """Muuntaa mono float32 -äänen kohdenäytteenottotaajuuteen lineaarisesti."""
+    if src_rate <= 0 or dst_rate <= 0 or src_rate == dst_rate or samples.size == 0:
+        return np.asarray(samples, dtype=np.float32)
+    dst_len = max(1, int(round(samples.size * (dst_rate / src_rate))))
+    src_positions = np.linspace(0.0, float(samples.size - 1), num=dst_len, dtype=np.float64)
+    indices = np.arange(samples.size, dtype=np.float64)
+    return np.interp(src_positions, indices, samples).astype(np.float32, copy=False)
+
+
+def _select_preferred_input(sd_module: Any, target_rate: int) -> tuple[int | None, int]:
+    """Valitsee Windowsissa WASAPI-oletusmikrofonin natiivitaajuudella, jos saatavilla."""
+    try:
+        hostapis = sd_module.query_hostapis()
+        default_in = sd_module.query_devices(kind="input")
+        default_name = str(default_in.get("name", "")).strip()
+        for api_idx, api in enumerate(hostapis):
+            if "WASAPI" not in str(api.get("name", "")).upper():
+                continue
+            for dev_idx in api.get("devices", ()):
+                dev = sd_module.query_devices(dev_idx)
+                if int(dev.get("max_input_channels", 0)) <= 0:
+                    continue
+                if default_name and default_name[:18].lower() in str(dev.get("name", "")).lower():
+                    native_rate = int(dev.get("default_samplerate", target_rate)) or target_rate
+                    return int(dev_idx), native_rate
+            fallback_dev = api.get("default_input_device", -1)
+            if isinstance(fallback_dev, int) and fallback_dev >= 0:
+                dev = sd_module.query_devices(fallback_dev)
+                native_rate = int(dev.get("default_samplerate", target_rate)) or target_rate
+                return fallback_dev, native_rate
+    except Exception:
+        logger.debug("WASAPI-laitteen valinta ohitettiin, käytetään oletusmikrofonia", exc_info=True)
+    return None, target_rate
 
 
 def _default_stream_factory(
@@ -35,16 +72,29 @@ def _default_stream_factory(
 ) -> AbstractContextManager[Any]:
     import sounddevice as sd
 
+    device_idx, stream_rate = _select_preferred_input(sd, sample_rate)
+    stream_block = max(1, int(round(block_size * (stream_rate / sample_rate))))
+
     def _callback(indata: np.ndarray, _frames: int, _time_info: Any, status: Any) -> None:
         if status:
             logger.debug("sounddevice-tila: %s", status)
-        on_audio(indata[:, 0].copy())
+        mono = indata[:, 0].copy()
+        if stream_rate != sample_rate:
+            mono = resample_audio(mono, stream_rate, sample_rate)
+        on_audio(mono)
 
+    logger.info(
+        "Avataan äänivirta (laite=%s, %d Hz -> %d Hz)",
+        device_idx if device_idx is not None else "oletus",
+        stream_rate,
+        sample_rate,
+    )
     return sd.InputStream(
-        samplerate=sample_rate,
+        device=device_idx,
+        samplerate=stream_rate,
         channels=1,
         dtype="float32",
-        blocksize=block_size,
+        blocksize=stream_block,
         callback=_callback,
     )
 
@@ -59,6 +109,7 @@ class AudioListener:
         on_error: ErrorCallback | None = None,
         on_processing: ProcessingCallback | None = None,
         on_ready: ReadyCallback | None = None,
+        on_candidates: CandidatesCallback | None = None,
         vad_config: VadConfig | None = None,
         stream_factory: StreamFactory = _default_stream_factory,
     ) -> None:
@@ -67,6 +118,7 @@ class AudioListener:
         self._on_error = on_error
         self._on_processing = on_processing
         self._on_ready = on_ready
+        self._on_candidates = on_candidates
         self._vad = EnergyVadSegmenter(vad_config)
         self._stream_factory = stream_factory
 
@@ -181,7 +233,16 @@ class AudioListener:
         if self._on_processing is not None:
             self._on_processing(True)
         try:
-            text = self._transcriber.transcribe(segment, sample_rate=sample_rate).strip()
+            cand_fn = getattr(self._transcriber, "transcribe_candidates", None)
+            if callable(cand_fn):
+                candidates = [
+                    str(item).strip()
+                    for item in cand_fn(segment, sample_rate=sample_rate)
+                    if str(item).strip()
+                ]
+            else:
+                single = self._transcriber.transcribe(segment, sample_rate=sample_rate).strip()
+                candidates = [single] if single else []
         except Exception as exc:
             logger.exception("Puheentunnistus epäonnistui")
             if self._on_processing is not None:
@@ -190,9 +251,12 @@ class AudioListener:
                 self._on_error(f"Puheentunnistusvirhe: {exc}")
             return
 
-        if text:
-            logger.info("Tunnistettu puhe (%.1f s): %r", duration_s, text)
-            self._on_utterance(text)
+        if candidates:
+            logger.info("Tunnistettu puhe (%.1f s): %r", duration_s, candidates[0])
+            if self._on_candidates is not None:
+                self._on_candidates(candidates)
+            else:
+                self._on_utterance(candidates[0])
         elif self._on_processing is not None:
             self._on_processing(False)
 

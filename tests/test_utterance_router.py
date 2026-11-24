@@ -156,6 +156,54 @@ class UtteranceRouterTests(unittest.TestCase):
         self.assertTrue(cmd_res.success)
         self.assertEqual(self.launcher.launched, ["laskin"])
 
+    def test_consecutive_dictation_utterances_insert_space_unless_punctuation_or_enter(self) -> None:
+        self.router.handle_utterance("testi", AssistantMode.DICTATING)
+        self.router.handle_utterance("testi", AssistantMode.DICTATING)
+        self.router.handle_utterance("piste", AssistantMode.DICTATING)
+        self.router.handle_utterance("enter", AssistantMode.DICTATING)
+        self.router.handle_utterance("uusi rivi", AssistantMode.DICTATING)
+
+        self.assertEqual(
+            self.keyboard.sent_batches,
+            [
+                [TextAction(text="testi")],
+                [TextAction(text=" testi")],
+                [TextAction(text=".")],
+                [KeyAction(key=VirtualKey.ENTER)],
+                [TextAction(text="uusi rivi")],
+            ],
+        )
+
+    def test_direct_lopeta_sanelu_stops_dictation_without_wake_word(self) -> None:
+        for phrase in ("Lopeta sanelu.", "Lopeta sanelut"):
+            with self.subTest(phrase=phrase):
+                res = self.router.handle_utterance(phrase, AssistantMode.DICTATING)
+
+                self.assertTrue(res.handled)
+                self.assertTrue(res.success)
+                self.assertIs(res.new_mode, AssistantMode.IDLE)
+                self.assertEqual(self.keyboard.sent_batches, [])
+
+    def test_other_command_during_dictation_ends_dictation(self) -> None:
+        res = self.router.handle_utterance("puhis save t1", AssistantMode.DICTATING)
+
+        self.assertTrue(res.handled)
+        self.assertTrue(res.success)
+        self.assertIs(res.new_mode, AssistantMode.IDLE)
+
+    def test_handle_candidates_picks_valid_command_from_alternatives(self) -> None:
+        self.router.handle_utterance("puhis save koodi", AssistantMode.IDLE)
+
+        chosen, res = self.router.handle_candidates(
+            ["Fokus teko", "Puhis fokus koodi"],
+            AssistantMode.IDLE,
+        )
+
+        self.assertEqual(chosen, "Puhis fokus koodi")
+        self.assertTrue(res.handled)
+        self.assertTrue(res.success)
+        self.assertEqual(self.windows.focused, [500])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,6 +14,8 @@ class VirtualKey(StrEnum):
     ENTER = "ENTER"
     TAB = "TAB"
     BACKSPACE = "BACKSPACE"
+    CTRL_BACKSPACE = "CTRL_BACKSPACE"
+    CLEAR_ALL = "CLEAR_ALL"
     ESCAPE = "ESCAPE"
     SPACE = "SPACE"
     DELETE = "DELETE"
@@ -29,6 +31,8 @@ _SPECIAL_TOKEN_MAP: dict[str, VirtualKey] = {
     "{TAB}": VirtualKey.TAB,
     "{BACKSPACE}": VirtualKey.BACKSPACE,
     "{BS}": VirtualKey.BACKSPACE,
+    "{CTRL_BACKSPACE}": VirtualKey.CTRL_BACKSPACE,
+    "{CLEAR_ALL}": VirtualKey.CLEAR_ALL,
     "{ESCAPE}": VirtualKey.ESCAPE,
     "{ESC}": VirtualKey.ESCAPE,
     "{SPACE}": VirtualKey.SPACE,

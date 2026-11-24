@@ -5,6 +5,7 @@ from pathlib import Path
 
 APP_DIR_NAME = "puhis"
 CONFIG_FILE_NAME = "config.json"
+WINDOWS_FILE_NAME = "windows.json"
 
 
 def _env_dir(variable: str, fallback: Path) -> Path:
@@ -27,6 +28,11 @@ def get_local_data_dir() -> Path:
 def get_config_path() -> Path:
     """Palauttaa asetustiedoston polun."""
     return get_config_dir() / CONFIG_FILE_NAME
+
+
+def get_windows_path() -> Path:
+    """Palauttaa tallennettujen ikkuna-aliasten tiedostopolun."""
+    return get_config_dir() / WINDOWS_FILE_NAME
 
 
 def get_log_dir() -> Path:

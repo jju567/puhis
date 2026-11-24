@@ -26,13 +26,20 @@ _PUHIS_PHONETIC_VARIANTS = frozenset({
     "poohis",
     "puhus",
     "puhes",
+    "kuhis",
+    "huuhis",
+    "luis",
+})
+_PUHIS_TWO_WORD_VARIANTS = frozenset({
+    ("who", "is"),
 })
 
 _FILLER_PREFIXES = frozenset({"hei", "moi", "oi", "no", "hei,", "kuule"})
 
-_START_DICTATION_VERBS = frozenset({"sanele", "kirjoita", "sanelu"})
+_START_DICTATION_VERBS = frozenset({"sanele", "sanelle", "kirjoita", "sanelu"})
 _START_DICTATION_PHRASES = frozenset({
     ("sanele",),
+    ("sanelle",),
     ("kirjoita",),
     ("aloita", "sanelu"),
     ("sanelu", "päälle"),
@@ -48,10 +55,21 @@ _STOP_DICTATION_PHRASES = frozenset({
 })
 
 _MUTE_VERBS = frozenset({"mykistä", "hiljaa"})
-_SAVE_VERBS = frozenset({"save", "tallenna", "seivaa"})
+_SAVE_VERBS = frozenset({"save", "tallenna", "talleta", "seivaa"})
 _FOCUS_VERBS = frozenset({"fokus", "focus", "aktivoi", "näytä"})
 _HIDE_VERBS = frozenset({"piilota", "minimoi"})
-_LAUNCH_VERBS = frozenset({"avaa", "avaan", "ava", "käynnistä", "käynnistää"})
+_LAUNCH_VERBS = frozenset({
+    "avaa",
+    "avaan",
+    "ava",
+    "avaat",
+    "avataan",
+    "avataanpa",
+    "aukaise",
+    "aukaisepa",
+    "käynnistä",
+    "käynnistää",
+})
 
 WAKE_FUZZY_THRESHOLD = 0.72
 VERB_FUZZY_THRESHOLD = 0.75
@@ -120,17 +138,53 @@ def _consume_wake_word(tokens: list[str], wake_tokens: list[str]) -> tuple[bool,
         if _span_matches_wake(tokens[1 : 1 + w_len], wake_tokens):
             start_idx = 1
 
+    if len(tokens) - start_idx >= 2 and wake_tokens == ["puhis"]:
+        if tuple(tokens[start_idx : start_idx + 2]) in _PUHIS_TWO_WORD_VARIANTS:
+            return True, tokens[start_idx + 2 :]
+
+    # Google kuulee usein "puhis avaa ..." muodossa "puhdistava ..."
+    if wake_tokens == ["puhis"] and tokens[start_idx] in ("puhdistava", "puhdistavaa"):
+        return True, ["avaa", *tokens[start_idx + 1 :]]
+
+    # Selainpuhe voi leikata sanan alun ("puhis avaa ..." -> "is avaa ...") tai kuulla "puhis" -> "pois".
+    if (
+        wake_tokens == ["puhis"]
+        and tokens[start_idx] in ("is", "pois")
+        and len(tokens) > start_idx + 1
+        and _is_command_verb(tokens[start_idx + 1])
+    ):
+        return True, tokens[start_idx + 1 :]
+
     if len(tokens) - start_idx < w_len:
         return False, tokens
     if not _span_matches_wake(tokens[start_idx : start_idx + w_len], wake_tokens):
+        # Selainpuhe (Chrome) voi yhdistää edeltävää puhetta samaan jaksoon ennen herätesanaa.
+        for pos in range(1, len(tokens) - w_len + 1):
+            if tokens[pos : pos + w_len] == wake_tokens:
+                idx = pos + w_len
+                while idx + w_len <= len(tokens) and _span_matches_wake(
+                    tokens[idx : idx + w_len], wake_tokens
+                ):
+                    idx += w_len
+                return True, tokens[idx:]
         return False, tokens
 
     idx = start_idx + w_len
+    # Selainpuhe voi liittää verbin suoraan herätesanan perään ("puhissanelle", "puhistalleta").
+    trailing_tokens: list[str] = []
+    if w_len == 1 and len(tokens[start_idx]) > len(wake_tokens[0]):
+        first_tok = tokens[start_idx]
+        w_tok = wake_tokens[0]
+        if first_tok.startswith(w_tok):
+            suffix = first_tok[len(w_tok) :]
+            if _is_command_verb(suffix):
+                trailing_tokens.append(suffix)
+
     # Ohitetaan peräkkäiset toistot, esim. "puis, puis, avaa, laskin."
     while idx + w_len <= len(tokens) and _span_matches_wake(tokens[idx : idx + w_len], wake_tokens):
         idx += w_len
 
-    return True, tokens[idx:]
+    return True, [*trailing_tokens, *tokens[idx:]]
 
 
 def _span_matches_wake(span: list[str], wake_tokens: list[str]) -> bool:
@@ -159,6 +213,9 @@ def _parse_action_tokens(
     known_app_aliases: Collection[str],
 ) -> ParsedCommand | None:
     rest_tuple = tuple(rest)
+    if rest_tuple == ("herää",):
+        return ParsedCommand(command_type=CommandType.WAKE, target=None, raw_text=raw_text)
+
     if rest_tuple in _START_DICTATION_PHRASES or (
         len(rest) == 1 and _matches_verb(rest[0], _START_DICTATION_VERBS)
     ):
@@ -186,9 +243,10 @@ def _parse_action_tokens(
 
     if _matches_verb(verb, _FOCUS_VERBS):
         if len(args) == 1:
+            resolved = _resolve_window_alias(args[0], known_window_aliases)
             return ParsedCommand(
                 command_type=CommandType.FOCUS_WINDOW,
-                target=normalize_window_alias(args[0]),
+                target=resolved,
                 raw_text=raw_text,
             )
         return None
@@ -197,14 +255,23 @@ def _parse_action_tokens(
         if not args:
             return ParsedCommand(command_type=CommandType.HIDE_WINDOW, target=None, raw_text=raw_text)
         if len(args) == 1:
+            resolved = _resolve_window_alias(args[0], known_window_aliases)
             return ParsedCommand(
                 command_type=CommandType.HIDE_WINDOW,
-                target=normalize_window_alias(args[0]),
+                target=resolved,
                 raw_text=raw_text,
             )
         return None
 
     if _matches_verb(verb, _LAUNCH_VERBS):
+        if len(args) == 1:
+            win_target = _match_launch_as_window(args[0], known_window_aliases, known_app_aliases)
+            if win_target is not None:
+                return ParsedCommand(
+                    command_type=CommandType.FOCUS_WINDOW,
+                    target=win_target,
+                    raw_text=raw_text,
+                )
         target_app = " ".join(args).strip()
         if target_app:
             resolved_app = _resolve_app_alias(target_app, known_app_aliases)
@@ -256,6 +323,67 @@ def _matches_verb(token: str, verbs: frozenset[str]) -> bool:
     if len(token) < 3:
         return False
     return any(_similarity(token, v) >= VERB_FUZZY_THRESHOLD for v in verbs)
+
+
+def _is_command_verb(token: str) -> bool:
+    return any(
+        _matches_verb(token, group)
+        for group in (
+            _START_DICTATION_VERBS,
+            _STOP_DICTATION_VERBS,
+            _MUTE_VERBS,
+            _SAVE_VERBS,
+            _FOCUS_VERBS,
+            _HIDE_VERBS,
+            _LAUNCH_VERBS,
+        )
+    )
+
+
+def _match_launch_as_window(
+    raw_target: str,
+    known_window_aliases: Collection[str],
+    known_app_aliases: Collection[str],
+) -> str | None:
+    """Tulkitaan `avaa <kohde>` ikkunan aktivoinniksi, jos kohde on ikkunapaikka tai tallennettu ikkuna."""
+    candidate = normalize_window_alias(raw_target)
+    if not candidate:
+        return None
+    if is_default_window_slot(candidate):
+        return candidate
+    if not known_window_aliases:
+        return None
+    # Jos kohde täsmää sallittuun sovellukseen, pidetään ensisijaisena sovelluskäynnistys.
+    if _match_known_app(raw_target, known_app_aliases) is not None:
+        return None
+    normalized_known = {normalize_window_alias(a) for a in known_window_aliases if a.strip()}
+    resolved = _resolve_window_alias(candidate, normalized_known)
+    return resolved if resolved in normalized_known else None
+
+
+def _resolve_window_alias(raw_alias: str, known_window_aliases: Collection[str]) -> str:
+    """Palauttaa tarkimmin täsmäävän tallennetun ikkuna-aliaksen (tai normalisoidun syötteen)."""
+    candidate = normalize_window_alias(raw_alias)
+    if not candidate or is_default_window_slot(candidate) or not known_window_aliases:
+        return candidate
+
+    normalized_known = [normalize_window_alias(a) for a in known_window_aliases if a.strip()]
+    if candidate in normalized_known:
+        return candidate
+
+    best_alias: str | None = None
+    best_score = 0.0
+    for alias in normalized_known:
+        if is_default_window_slot(alias):
+            continue
+        if len(alias) >= 4 and candidate.startswith(alias[:4]):
+            score = max(_similarity(candidate, alias), 0.80)
+        else:
+            score = _similarity(candidate, alias)
+        if score >= APP_FUZZY_THRESHOLD and score > best_score:
+            best_score = score
+            best_alias = alias
+    return best_alias if best_alias is not None else candidate
 
 
 def _resolve_app_alias(target: str, known_app_aliases: Collection[str]) -> str:

@@ -126,6 +126,13 @@ class CatGeometry:
         return max(0.0, self.eye_radius - self.pupil_radius)
 
 
+def cat_widget_height(size: int, *, show_wake_word: bool = True) -> int:
+    """Palauttaa kissa-ikkunan kokonaiskorkeuden (kissa + valinnainen herätesanakyltti)."""
+    if not show_wake_word:
+        return size
+    return size + max(22, int(round(size * 0.25)))
+
+
 def paint_cat(
     painter: QPainter,
     geometry: CatGeometry,
@@ -140,6 +147,7 @@ def paint_cat(
     processing: bool = False,
     spinner_angle_deg: float = 0.0,
     sleeping: bool = False,
+    wake_word: str = "",
 ) -> None:
     """Piirtää kissan annettuun maalariin."""
     painter.save()
@@ -208,6 +216,9 @@ def paint_cat(
             active_badge,
             is_error=effective_mode is AssistantMode.ERROR,
         )
+
+    if wake_word.strip():
+        _paint_wake_word_label(painter, geometry, wake_word.strip(), ring_color, sleeping=sleeping)
 
     painter.restore()
 
@@ -536,6 +547,40 @@ def _paint_status_pill(
     painter.setFont(font)
     display = text if len(text) <= 14 else text[:13] + "…"
     painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, display)
+
+
+def _paint_wake_word_label(
+    painter: QPainter,
+    geometry: CatGeometry,
+    wake_word: str,
+    accent_color: QColor,
+    *,
+    sleeping: bool = False,
+) -> None:
+    """Piirtää aktiivisen herätesanan tyylikkäällä fontilla kissan alapuolelle."""
+    s = geometry.size
+    pill_h = max(18.0, 0.21 * s)
+    pill_rect = QRectF(0.10 * s, 1.00 * s, 0.80 * s, pill_h)
+    radius = pill_h * 0.48
+
+    border = QColor(accent_color)
+    border.setAlpha(120 if sleeping else 200)
+    bg = QColor(17, 22, 31, 185 if sleeping else 225)
+
+    painter.setPen(_pen(border, 0.014 * s))
+    painter.setBrush(bg)
+    painter.drawRoundedRect(pill_rect, radius, radius)
+
+    font = QFont("Bahnschrift", max(7, int(0.095 * s)), QFont.Weight.DemiBold)
+    font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, max(0.8, 0.012 * s))
+    painter.setFont(font)
+
+    text_color = QColor("#94A3B8") if sleeping else QColor("#F8FAFC")
+    painter.setPen(text_color)
+    display = wake_word.upper()
+    if len(display) > 12:
+        display = display[:11] + "…"
+    painter.drawText(pill_rect, Qt.AlignmentFlag.AlignCenter, display)
 
 
 def _paint_zzz(painter: QPainter, geometry: CatGeometry) -> None:

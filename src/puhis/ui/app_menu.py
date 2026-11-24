@@ -24,6 +24,7 @@ THEME_LABELS_FI: dict[CatTheme, str] = {
 ENGINE_LABELS_FI: dict[SttEngine, str] = {
     SttEngine.WEB: "🌐 Selaintunnistus (Google fi-FI – nopea)",
     SttEngine.WHISPER: "💻 Paikallinen Whisper (offline CPU)",
+    SttEngine.CHROME: "🌐 Chrome-kuuntelu (Web Speech – vakain)",
 }
 
 
